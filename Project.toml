@@ -1,3 +1,7 @@
+name = "VNESolver"
+uuid = "b45eafce-6222-4f20-9293-6528c73cf671"
+version = "0.1.0"
+
 [deps]
 CPLEX = "a076750e-1247-5638-91d2-ce28b192dca0"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
@@ -5,4 +9,10 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[compat]
+Printf = "1.11.0"
+Random = "1.11.0"

@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "f0e1e65be0679d4f217d3fdc9ed108b8dc074d02"
+project_hash = "5ece446a6c3e394e71e596d865db99cd9d456ab6"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -1096,6 +1096,12 @@ version = "0.4.1"
 git-tree-sha1 = "ca0969166a028236229f63514992fc073799bb78"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 version = "0.2.0"
+
+[[deps.VNESolver]]
+deps = ["CPLEX", "DataStructures", "Graphs", "JSON", "JuMP", "Plots", "ProfileView", "Random"]
+path = "."
+uuid = "b45eafce-6222-4f20-9293-6528c73cf671"
+version = "0.1.0"
 
 [[deps.Vulkan_Loader_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Wayland_jll", "Xorg_libX11_jll", "Xorg_libXrandr_jll", "xkbcommon_jll"]
