@@ -2,15 +2,10 @@
 # define some useful functions
 
 
-function reverse_edge(e::Edge)
-    return (Edge(dst(e), src(e)))
-end
 
 
 
-
-
-function get_routing_cost(instance::InstanceVNE, edge_routing::Vector{Vector{Int}})
+function get_routing_cost(instance::Instance, edge_routing::Vector{Vector{Int}})
     
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, sdir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
@@ -28,7 +23,7 @@ function get_routing_cost(instance::InstanceVNE, edge_routing::Vector{Vector{Int
 end
 
 
-function get_placement_cost(instance::InstanceVNE, node_placement::Vector{Int})
+function get_placement_cost(instance::Instance, node_placement::Vector{Int})
     
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, sdir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
@@ -43,6 +38,6 @@ function get_placement_cost(instance::InstanceVNE, node_placement::Vector{Int})
 end
 
 
-function get_mapping_cost(instance::InstanceVNE, mapping::Mapping)
+function get_mapping_cost(instance::Instance, mapping::Mapping)
     return get_placement_cost(instance, mapping.node_placement) + get_routing_cost(instance, mapping.edge_routing) 
 end

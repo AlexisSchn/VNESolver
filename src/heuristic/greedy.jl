@@ -37,8 +37,6 @@ function solve_greedy(instance; nb_greedy = 100, time_max = 10)
     # Loop tools
     best_cost       = Inf
     iter            = 1
-    time_placement  = 0
-    time_routing    = 0
     time_overall = time() - time_beginning
 
 
@@ -52,19 +50,13 @@ function solve_greedy(instance; nb_greedy = 100, time_max = 10)
         end
 
         placement[most_central_v_node] = s_node_start
-
-        time_0 = time()
         placement_cost = complete_partial_placement!(placement, instance, shortest_paths) 
-        time_placement += time() - time_0
 
-
-        time_1 = time()
         if placement_cost < Inf
             routing_cost = shortest_path_routing!(routing, instance, placement)
         else
             routing_cost = Inf
         end
-        time_routing += time() - time_1
 
         total_cost = placement_cost + routing_cost
 
@@ -82,7 +74,7 @@ function solve_greedy(instance; nb_greedy = 100, time_max = 10)
         time_overall = time() - time_beginning
     end
 
-    println("Found $best_cost with $iter iterations and $(time()-time_beginning) time, placement $time_placement, routing $time_routing")
+    println("Found $best_cost with $iter iterations and $(time()-time_beginning) time")
     return (mapping=Mapping(best_placement, best_routing), mapping_cost=best_cost)
 end
 

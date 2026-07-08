@@ -1,7 +1,7 @@
 # src/heuristic/local_search.jl
 # iteratively removes a few adjacent nodes in the graph, replace them, and reroute the adjacent edges
 
-function local_search(instance::InstanceVNE, initial_mapping::Mapping; 
+function local_search(instance::Instance, initial_mapping::Mapping; 
         nb_local_search::Int = 500, 
         time_max::Float64 = 10., 
         nb_nodes_removed::Int = 10

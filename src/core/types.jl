@@ -4,6 +4,7 @@ struct VirtualNetwork
     name::String
     node_demands::Vector{Int}
     edge_demands::Matrix{Int}
+    edge_ids::Matrix{Int}
 end
 
 struct SubstrateNetwork
@@ -14,10 +15,11 @@ struct SubstrateNetwork
     node_costs::Vector{Int}
     edge_capacities::Matrix{Int}
     edge_costs::Matrix{Int}
+    edge_ids::Matrix{Int}
 end
 
 
-struct InstanceVNE
+struct Instance
     v_network::VirtualNetwork
     s_network::SubstrateNetwork
 end

@@ -7,10 +7,6 @@ struct DynamicWeightMatrix{M, C, T} <: AbstractMatrix{T}
     demand::T
 end
 
-function DynamicWeightMatrix(base_dist, capacities, demand)
-    return DynamicWeightMatrix{typeof(base_dist), typeof(capacities), typeof(demand)}(base_dist, capacities, demand)
-end
-
 # Implement the minimum required Interface for Graphs.jl distance matrix
 Base.size(d::DynamicWeightMatrix) = size(d.base_dist)
 @inline function Base.getindex(d::DynamicWeightMatrix, u::Int, v::Int)
@@ -143,15 +139,23 @@ function complete_partial_placement!(partial_placement, instance, shortest_paths
         curr_demand = vn_dem[v_node]
 
         empty!(placement_v_neighbors)
+        v_neighbors = Int[]
+
         for v_neigh in neighbors(v_g, v_node)
             if is_placed[v_neigh]
+                push!(v_neighbors, v_neigh)
                 push!(placement_v_neighbors, partial_placement[v_neigh])
             end
         end
         
         @. scores = ifelse(is_available & (sn_cap >= curr_demand), 0.0, Inf)
-        for p_neigh in placement_v_neighbors
-            @views scores .+= shortest_paths.dists[:,p_neigh ]
+        for i_neigh in 1:length(placement_v_neighbors)
+            #@views scores .+= shortest_paths.dists[:,placement_v_neighbors[i_neigh]]
+            dem_edge = ve_dem[v_node, v_neighbors[i_neigh]]
+            if v_node > v_neighbors[i_neigh]
+                dem_edge = ve_dem[v_neighbors[i_neigh], v_node]
+            end
+            @views scores .+= shortest_paths.dists[:,placement_v_neighbors[i_neigh]] #* dem_edge .+ sn_cost * curr_demand
         end
         selected_node = argmin(scores)
 
