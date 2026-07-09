@@ -7,7 +7,6 @@ function solve_path_formulation(instance::Instance)
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
 
-
     model = Model(CPLEX.Optimizer)
     set_attribute(model, "CPXPARAM_LPMethod", 2)
     set_silent(model)
@@ -58,7 +57,7 @@ function solve_path_formulation(instance::Instance)
     
     println("Finished! in $(time()-time_beginning), with $(time_pricer) for pricer and $(time_rmp) for RMP.")
 
-    
+    #=
     # Get the solution for inspection
     println("Node placement:")
     x_values = value.(model[:x])
@@ -74,7 +73,7 @@ function solve_path_formulation(instance::Instance)
         end
         println("\tAt the end, sum $s")
     end
-    
+    =#
 
 end
 

@@ -2,7 +2,7 @@ module VNESolver
 
 using Graphs, JSON
 
-export Instance, VirtualNetwork, SubstrateNetwork, Mapping, AbstractSolverResult
+export Instance, VirtualNetwork, SubstrateNetwork, Mapping, AbstractSolverResult, AbstractSolverParameters
 export get_instance_from_folder, read_substrate, read_virtual, read_virtuals_folder, read_substrates_folder
 export get_mapping_cost
 
@@ -12,6 +12,7 @@ include("core/tools.jl")
 include("core/io.jl")
 
 abstract type AbstractSolverResult end
+abstract type AbstractSolverParameters end
 
 # Submodules
 include("compact/FlowFormulation.jl")

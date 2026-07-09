@@ -3,7 +3,6 @@ module FlowFormulation
 using ..VNESolver
 using JuMP, CPLEX, Graphs
 
-include("flow_formulation.jl")
 
 struct FlowFormulationResult <: AbstractSolverResult
     vn_name::String
@@ -17,7 +16,6 @@ struct FlowFormulationResult <: AbstractSolverResult
 end
 
 
-# if feasible
 function FlowFormulationResult(instance::Instance, model::Model, status::Symbol)
     if status==:Feasible
         return FlowFormulationResult(
@@ -44,9 +42,7 @@ function FlowFormulationResult(instance::Instance, model::Model, status::Symbol)
     end
 end
 
-
-
-
+include("flow_formulation.jl")
 
 export solve_flow_formulation, solve_flow_formulation_linear
 
