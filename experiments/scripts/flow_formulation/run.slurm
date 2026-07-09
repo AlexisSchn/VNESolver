@@ -1,4 +1,6 @@
 #!/bin/bash
+#SBATCH --output=/dev/null
+#SBATCH --error=/dev/null
 #SBATCH --array=0-2
 #SBATCH --exclusive
 #SBATCH --job-name=VNE
@@ -34,6 +36,6 @@ fi
 # tiny sleep to ensure the folder and note are completely settled
 sleep 2
 
-srun julia --project=$PROJ_DIR test_flow.jl "$SIZE" "$XP_DIR" \
+srun julia --project=$PROJ_DIR scripts/flow_formulation/test_flow.jl "$SIZE" "$XP_DIR" \
     > "$XP_DIR/output-${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.txt" \
     2> "$XP_DIR/error-${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.txt"

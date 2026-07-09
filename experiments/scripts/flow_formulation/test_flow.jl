@@ -16,7 +16,7 @@ sns = read_substrates_folder(path_instances*"sns/")
 # Warm up: no need for CPLEX
 
 results = AbstractSolverResult[]
-
+ 
 # Loop
 for vn in vns
     println("Doing vn $(vn.name)")
