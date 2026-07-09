@@ -1,15 +1,9 @@
 module VNESolver
 
-using Random
+using Graphs, JSON
 
-using JuMP
-using Graphs
-using CPLEX
-using DataStructures
-import JSON
-
-export Instance, VirtualNetwork, SubstrateNetwork, Mapping 
-export get_instance_from_folder, read_substrate, read_virtual 
+export Instance, VirtualNetwork, SubstrateNetwork, Mapping, AbstractSolverResult
+export get_instance_from_folder, read_substrate, read_virtual, read_virtuals_folder, read_substrates_folder
 export get_mapping_cost
 
 # Local
@@ -17,6 +11,7 @@ include("core/types.jl")
 include("core/tools.jl")
 include("core/io.jl")
 
+abstract type AbstractSolverResult end
 
 # Submodules
 include("compact/FlowFormulation.jl")

@@ -18,22 +18,11 @@ function solve_flow_formulation(
     status = primal_status(model)
     if status != MOI.FEASIBLE_POINT
         println("error! no solution possible...")
-        return (
-            mapping_cost=Inf,
-            solving_time = time()-time_beginning,
-            lower_bound = objective_bound(model),
-            gap  = relative_gap(model),
-            node_count = node_count(model)
-        )
+        return FlowFormulationResult(instance)
     end
 
-    return (
-        mapping_cost = objective_value(model),
-        solving_time = time()-time_beginning,
-        lower_bound = objective_bound(model),
-        gap  = relative_gap(model),
-        node_count = node_count(model)
-    )
+
+    return FlowFormulationResult(instance)
 end
 
 

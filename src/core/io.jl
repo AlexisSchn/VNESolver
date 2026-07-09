@@ -125,3 +125,26 @@ function get_instance_from_folder(folder_path::String)
     
     return Instance(virtual_network, substrate_network)
 end
+
+
+function read_virtuals_folder(folderpath)
+    vns = VirtualNetwork[]
+    for filename in readdir(folderpath; join=true)
+        json_graph = JSON.parsefile(filename)
+        vn = read_virtual(json_graph)
+        push!(vns, vn)
+    end
+    return vns
+end
+
+
+function read_substrates_folder(folderpath)
+    sns = SubstrateNetwork[]
+    for filename in readdir(folderpath; join=true)
+        json_graph = JSON.parsefile(filename)
+        sn = read_substrate(json_graph)
+        push!(sns, sn)
+    end
+    return sns
+end
+
