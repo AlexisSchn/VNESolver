@@ -24,7 +24,7 @@ for vn in vns
         println("   for sn $(sn.name)")
 
         instance = Instance(vn, sn)
-        result = solve_flow_formulation(instance, time_limit=50)
+        result = solve_flow_formulation(instance, time_limit=3600)
 
         push!(results, result)        
         df_results = DataFrame(results)

@@ -18,11 +18,11 @@ function solve_flow_formulation(
     status = primal_status(model)
     if status != MOI.FEASIBLE_POINT
         println("error! no solution possible...")
-        return FlowFormulationResult(instance)
+        return FlowFormulationResult(instance, model, :Unfeasible)
     end
 
 
-    return FlowFormulationResult(instance)
+    return FlowFormulationResult(instance, model, :Feasible)
 end
 
 

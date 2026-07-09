@@ -11,13 +11,42 @@ struct FlowFormulationResult <: AbstractSolverResult
     objective_value::Float64
     lower_bound::Float64
     gap::Float64
+    nb_nodes::Int
     solving_time::Float64
     status::Symbol
 end
 
-function FlowFormulationResult(instance::Instance)
-    return FlowFormulationResult("", "", 30., 30., 3., 35., :Feasible)
+
+# if feasible
+function FlowFormulationResult(instance::Instance, model::Model, status::Symbol)
+    if status==:Feasible
+        return FlowFormulationResult(
+            instance.v_network.name, 
+            instance.s_network.name, 
+            objective_value(model), 
+            objective_bound(model),
+            relative_gap(model),
+            node_count(model), 
+            solve_time(model), 
+            :Feasible
+        )
+    elseif status==:Unfeasible
+        return FlowFormulationResult(
+            instance.v_network.name, 
+            instance.s_network.name, 
+            Inf, 
+            objective_bound(model),
+            Inf, 
+            node_count,
+            solve_time(model), 
+            :Unfeasible
+        )
+    end
 end
+
+
+
+
 
 export solve_flow_formulation, solve_flow_formulation_linear
 
