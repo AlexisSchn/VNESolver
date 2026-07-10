@@ -278,3 +278,14 @@ function compute_reduced_costs(submapping::Mapping, v_subgraph::Subgraph, duals:
 
     return (cost_edges + cost_nodes - duals.submapping_selection[v_subgraph])
 end
+
+
+function stabilize_duals!(dual_costs::DualValues, current_dual_costs::DualValues, stabilization_coeff::Float64)
+
+    dual_costs.submapping_selection.data .= dual_costs.submapping_selection.data * stabilization_coeff + current_dual_costs.submapping_selection.data * (1 - stabilization_coeff)
+    dual_costs.node_1t1 .= dual_costs.node_1t1 * stabilization_coeff + current_dual_costs.node_1t1 * (1 - stabilization_coeff)
+    dual_costs.flow_conservation.data .= dual_costs.flow_conservation.data * stabilization_coeff + current_dual_costs.flow_conservation.data * (1 - stabilization_coeff)
+    dual_costs.edge_capacity.data .= dual_costs.edge_capacity.data * stabilization_coeff + current_dual_costs.edge_capacity.data * (1 - stabilization_coeff)
+    dual_costs.flow_departure.data .= dual_costs.flow_departure.data * stabilization_coeff + current_dual_costs.flow_departure.data * (1 - stabilization_coeff)
+
+end

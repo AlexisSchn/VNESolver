@@ -63,6 +63,7 @@ function solve_subgraph_decomposition(instance::Instance; parameters::SubgraphDe
     time_max            = parameters.time_max
     nb_iter_max         = parameters.nb_iter_max
     gap_min             = parameters.gap_min
+    stabilization_coeff = parameters.stab_coeff
     keep_on             = true
 
     time_overall        = time() - time_beginning
@@ -79,6 +80,8 @@ function solve_subgraph_decomposition(instance::Instance; parameters::SubgraphDe
         end
     end
     pricer              = "greedy"
+    use_stabilization   = false
+    dual_costs = zero_duals(model_master) #! TODO
 
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
         
@@ -92,7 +95,13 @@ function solve_subgraph_decomposition(instance::Instance; parameters::SubgraphDe
         optimize!(model_master)
         time_rmp += time()-t
 
-        dual_costs = DualValues(model_master)
+        current_dual_costs = DualValues(model_master)
+        if use_stabilization
+            stabilize_duals!(dual_costs, current_dual_costs, stabilization_coeff)
+        else
+            dual_costs = current_dual_costs
+        end
+
         rmp_value = objective_value(model_master)
 
         for v_subgraph in v_subgraphs
@@ -129,7 +138,8 @@ function solve_subgraph_decomposition(instance::Instance; parameters::SubgraphDe
         average_reduced_cost = total_reduced / nb_pricer
         if average_reduced_cost > -3. && pricer=="greedy" && rmp_value < 10000
             pricer="exact"
-            println("Switching to exact pricers!")
+            use_stabilization = true
+            println("Switching to exact pricers! And using stabilization!")
         end
 
         time_overall = time() - time_beginning

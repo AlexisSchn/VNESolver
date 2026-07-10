@@ -23,6 +23,7 @@ struct SubgraphDecompositionParameters <: AbstractSolverParameters
     nb_iter_max::Int
     nb_columns_max::Int
     gap_min::Float64
+    stab_coeff::Float64
 end
 
 function SubgraphDecompositionParameters()
@@ -30,7 +31,8 @@ function SubgraphDecompositionParameters()
         500.,
         500,
         5000,
-        0.01
+        0.01,
+        0.85
     )
 end
 
