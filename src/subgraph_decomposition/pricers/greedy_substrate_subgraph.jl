@@ -245,7 +245,7 @@ function solve_greedy_sub_pricer(instance::Instance, v_subgraph::Subgraph, s_sub
                 push!(possible_start_s_node, s_node)
             end
         end
-        if isempty(s_node_start)
+        if isempty(possible_start_s_node)
             continue
         end
         s_node_start = rand(possible_start_s_node)
