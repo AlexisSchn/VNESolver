@@ -2,13 +2,6 @@
 
 
 
-struct Subgraph
-    nodes::Vector{Int}
-    edges::Vector{Edge}
-    cut_edges_with_src::Vector{Vector{Edge}}
-    cut_edges_with_dst::Vector{Vector{Edge}}
-    idx_of_nodes::Vector{Int}
-end
 
 struct Column
     variable
@@ -16,10 +9,7 @@ struct Column
 end
 
 
-struct VirtualDecomposition
-    subgraphs::Vector{Subgraph}
-    cut_edges::Vector{Edge}
-end
+
 
 
 

@@ -17,7 +17,7 @@ sns = read_substrates_folder(path_instances*"sns/")
 dummy_vn = vns[1]
 dummy_sn = sns[1]
 dummy_instance = Instance(dummy_vn, dummy_sn)
-_ = solve_subgraph_decomposition(dummy_instance)
+_ = solve_subgraph_decomposition_better(dummy_instance)
 
 results = AbstractSolverResult[]
  
@@ -28,7 +28,7 @@ for vn in vns
         println("   for sn $(sn.name)")
 
         instance = Instance(vn, sn)
-        result = solve_subgraph_decomposition(instance)
+        result = solve_subgraph_decomposition_better(instance)
 
         push!(results, result)        
         df_results = DataFrame(results)

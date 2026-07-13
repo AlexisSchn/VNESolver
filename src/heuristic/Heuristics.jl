@@ -1,7 +1,7 @@
 module Heuristics
 
 using ..VNESolver
-using DataStructures, Graphs
+using DataStructures, Graphs, Random
 
 include("base.jl")
 include("greedy.jl")

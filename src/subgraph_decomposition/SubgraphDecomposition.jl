@@ -4,8 +4,7 @@ using ..VNESolver
 using JuMP, CPLEX, DataStructures, Graphs, Random, Printf
 
 
-export solve_subgraph_decomposition, SubgraphDecompositionResult, SubgraphDecompositionParameters
-
+export solve_subgraph_decomposition, solve_subgraph_decomposition_better, SubgraphDecompositionResult, SubgraphDecompositionParameters
 
 struct SubgraphDecompositionResult <: AbstractSolverResult
     vn_name::String
@@ -31,14 +30,16 @@ function SubgraphDecompositionParameters()
         500.,
         500,
         5000,
-        0.01,
+        0.05,
         0.85
     )
 end
 
+include("network_decomposition.jl")
 include("master_problem.jl")
-include("pricer.jl")
-include("pricer_greedy.jl")
+include("pricers/milp.jl")
+include("pricers/greedy.jl")
+include("pricers/greedy_substrate_subgraph.jl")
 include("column_generation.jl")
 
 
