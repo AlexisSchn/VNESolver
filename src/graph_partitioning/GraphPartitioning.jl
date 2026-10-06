@@ -22,8 +22,9 @@ end
 
 include("kahip_wrapper.jl")
 include("metis_wrapper.jl")
-
+include("topologies.jl")
 
 export partition_kahip, partition_metis
+export edge_decomposition
 
 end # module

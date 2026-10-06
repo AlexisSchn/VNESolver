@@ -40,8 +40,6 @@ function shortest_path_routing!(edge_routing, instance::Instance, v_node_placeme
     routing_cost    = 0
     virtual_edges   = collect(v_subgraph.edges)
 
-
-
     # Loop
     idx_edges       = Vector(1:length(virtual_edges))
     shuffle!(idx_edges) # routing in a random order. TODO consider the demand/topology
@@ -53,11 +51,8 @@ function shortest_path_routing!(edge_routing, instance::Instance, v_node_placeme
 
         v_edge = virtual_edges[i_edge]
         demand_curr_edge = ve_dem[src(v_edge), dst(v_edge)]
-        idx_src = v_subgraph.idx_of_nodes[src(v_edge)]        
-        idx_dst = v_subgraph.idx_of_nodes[dst(v_edge)]
-        s_src = v_node_placement[idx_src]
-        s_dst = v_node_placement[idx_dst]
-         
+        s_src = v_node_placement[src(v_edge)]
+        s_dst = v_node_placement[dst(v_edge)]
         current_weights = DynamicWeightMatrixSubgraph(modified_se_cost, se_cap_copy, demand_curr_edge, allowed_s_edges) # virtual matrix, much faster
 
         edges_of_path = a_star(s_dir, s_src, s_dst, current_weights)
@@ -82,7 +77,9 @@ function shortest_path_routing!(edge_routing, instance::Instance, v_node_placeme
 
     return routing_cost
 
+
 end
+
 
 
 function complete_partial_placement!(partial_placement::Vector{Int}, instance::Instance, dists, v_subgraph::Subgraph, s_subgraph::Subgraph, duals::DualValues)
@@ -91,7 +88,7 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
 
     # Structures
-    nb_nodes = length(v_subgraph.nodes)
+    nb_nodes = nv(v_g)
     is_placed               = falses(nb_nodes)
     in_frontier             = falses(nb_nodes)
     is_available            = trues(nv(s_g))
@@ -111,12 +108,13 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
     placement_cost  = 0
 
     # Initialization
-    for (i_node, v_node) in enumerate(v_subgraph.nodes)
-        if !iszero(partial_placement[i_node])
-            is_placed[i_node] = true
-            curr_placement = partial_placement[i_node]
+    for v_node in v_subgraph.nodes
+        if !iszero(partial_placement[v_node])
+            is_placed[v_node] = true
+            curr_placement = partial_placement[v_node]
             is_available[curr_placement] = false
             placement_cost += vn_dem[v_node] * sn_cost[curr_placement] - duals.node_1t1[curr_placement]
+            i_node = v_subgraph.idx_of_nodes[v_node]
             placement_cost -= sum( duals.flow_conservation[curr_placement, v_edge] + duals.flow_departure[curr_placement, v_edge] for v_edge in v_subgraph.cut_edges_with_src[i_node]; init=0.)
             placement_cost += sum( duals.flow_conservation[curr_placement, v_edge] for v_edge in v_subgraph.cut_edges_with_dst[i_node];init=0.)
         end
@@ -126,25 +124,24 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
         # TODO tackle that case: place a random node wherever!
     end
 
-    for (i_node, v_node) in enumerate(v_subgraph.nodes)
-        if is_placed[i_node]
+    for v_node in v_subgraph.nodes
+        if is_placed[v_node]
             for neighbor in neighbors(v_g, v_node)
                 if neighbor ∈ v_subgraph.nodes
-                    i_neighbor = v_subgraph.idx_of_nodes[neighbor]
-                    if !is_placed[i_neighbor] && !in_frontier[i_neighbor]
-                        in_frontier[i_neighbor] = true
-                        push!(frontier, i_neighbor)
+                    if !is_placed[neighbor] && !in_frontier[neighbor]
+                        in_frontier[neighbor] = true
+                        push!(frontier, neighbor)
                     end
                 end
             end
         end
     end
 
+
     while !isempty(frontier)
 
         shuffle!(frontier)
-        i_v_node = pop!(frontier)
-        v_node = v_subgraph.nodes[i_v_node]
+        v_node = pop!(frontier)
         curr_demand = vn_dem[v_node]
 
         empty!(placement_v_neighbors)
@@ -152,24 +149,22 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
 
         for v_neigh in neighbors(v_g, v_node)
             if v_neigh ∈ v_subgraph.nodes
-                i_neighbor = v_subgraph.idx_of_nodes[v_neigh]
-                if is_placed[i_neighbor]
-                    push!(placement_v_neighbors, partial_placement[i_neighbor])
+                if is_placed[v_neigh]
+                    push!(placement_v_neighbors, partial_placement[v_neigh])
                     push!(v_neighbors, v_neigh)
                 end
             end
         end
         
         @. scores = ifelse(is_available & (sn_cap >= curr_demand) & allowed_s_nodes, 0.0, Inf)
-        for (i_neigh, p_neigh) in enumerate(placement_v_neighbors)
+
+        for p_neigh in placement_v_neighbors
             #@views scores .+= shortest_paths.dists[:,p_neigh ]
-            #=
-            v_neigh = v_neighbors[i_neigh]
-            dem_edge = ve_dem[v_node, v_neigh]
-            if v_node > v_neighbors[i_neigh]
-                dem_edge = ve_dem[v_neigh, v_node]
-            end
-            =#
+            #v_neigh = v_neighbors[i_neigh]
+            #dem_edge = ve_dem[v_node, v_neigh]
+            #if v_node > v_neighbors[i_neigh]
+            #    dem_edge = ve_dem[v_neigh, v_node]
+            #end
             @views scores .+= dists[:,p_neigh] # * dem_edge .+ (sn_cost-duals.node_1t1) * curr_demand
         end
         selected_node = argmin(scores)
@@ -178,22 +173,23 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
             return Inf
         end
 
-        partial_placement[i_v_node] = selected_node
+        partial_placement[v_node] = selected_node
         placement_cost += sn_cost[selected_node] * curr_demand - duals.node_1t1[selected_node]
+        i_v_node = v_subgraph.idx_of_nodes[v_node]
         placement_cost -= sum( duals.flow_conservation[selected_node, v_edge] + duals.flow_departure[selected_node, v_edge] for v_edge in v_subgraph.cut_edges_with_src[i_v_node];init=0.)
         placement_cost += sum( duals.flow_conservation[selected_node, v_edge] for v_edge in v_subgraph.cut_edges_with_dst[i_v_node];init=0.)
-        is_placed[i_v_node] = true
+        is_placed[v_node] = true
         is_available[selected_node] = false
         for v_neigh in neighbors(v_g, v_node)
             if v_neigh ∈ v_subgraph.nodes
-                i_neighbor = v_subgraph.idx_of_nodes[v_neigh]
-                if !is_placed[i_neighbor] && !in_frontier[i_neighbor]
-                    in_frontier[i_neighbor] = true
-                    push!(frontier, i_neighbor)
+                if !is_placed[v_neigh] && !in_frontier[v_neigh]
+                    in_frontier[v_neigh] = true
+                    push!(frontier, v_neigh)
                 end
             end
         end
     end
+
 
     return placement_cost
 end
@@ -209,14 +205,14 @@ function solve_greedy_sub_pricer(instance::Instance, v_subgraph::Subgraph, s_sub
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
 
     # Memory allocation
-    placement = Vector{Int}(undef, length(v_subgraph.nodes))
+    placement = Vector{Int}(undef, nv(v_g))
     routing = Vector{Vector{Int}}(undef, length(v_subgraph.edges))
     for i in 1:length(routing)
         routing[i] = Vector{Int}()
         sizehint!(routing[i], nv(s_g))
     end
 
-    best_placement = Vector{Int}(undef, length(v_subgraph.nodes))
+    best_placement = Vector{Int}(undef, nv(v_g))
     best_routing = Vector{Vector{Int}}(undef, length(v_subgraph.edges))
     for i in 1:length(best_routing)
         best_routing[i] = Vector{Int}()
@@ -238,10 +234,10 @@ function solve_greedy_sub_pricer(instance::Instance, v_subgraph::Subgraph, s_sub
 
     while iter <= nb_greedy && time_overall < time_max
     
-        i_start_node = rand(1:length(v_subgraph.nodes))
+        start_node = rand(v_subgraph.nodes)
         possible_start_s_node = Vector{Int}()
         for s_node in s_subgraph.nodes
-            if sn_cap[s_node] >= vn_dem[v_subgraph.nodes[i_start_node]]
+            if sn_cap[s_node] >= vn_dem[start_node]
                 push!(possible_start_s_node, s_node)
             end
         end
@@ -254,7 +250,7 @@ function solve_greedy_sub_pricer(instance::Instance, v_subgraph::Subgraph, s_sub
             empty!(routing[i_edge])
         end
 
-        placement[i_start_node] = s_node_start
+        placement[start_node] = s_node_start
         placement_cost = complete_partial_placement!(placement, instance, current_dists, v_subgraph, s_subgraph, duals) 
 
         if placement_cost < Inf

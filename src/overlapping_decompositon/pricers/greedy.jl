@@ -103,10 +103,6 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
             is_placed[v_node] = true
             curr_placement = partial_placement[v_node]
             is_available[curr_placement] = false
-            placement_cost += vn_dem[v_node] * sn_cost[curr_placement] - duals.node_1t1[curr_placement]
-            i_node = v_subgraph.idx_of_nodes[v_node]
-            placement_cost -= sum( duals.flow_conservation[curr_placement, v_edge] + duals.flow_departure[curr_placement, v_edge] for v_edge in v_subgraph.cut_edges_with_src[i_node]; init=0.)
-            placement_cost += sum( duals.flow_conservation[curr_placement, v_edge] for v_edge in v_subgraph.cut_edges_with_dst[i_node];init=0.)
         end
     end
 
@@ -163,10 +159,6 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
         end
 
         partial_placement[v_node] = selected_node
-        placement_cost += sn_cost[selected_node] * curr_demand - duals.node_1t1[selected_node]
-        i_v_node = v_subgraph.idx_of_nodes[v_node]
-        placement_cost -= sum( duals.flow_conservation[selected_node, v_edge] + duals.flow_departure[selected_node, v_edge] for v_edge in v_subgraph.cut_edges_with_src[i_v_node];init=0.)
-        placement_cost += sum( duals.flow_conservation[selected_node, v_edge] for v_edge in v_subgraph.cut_edges_with_dst[i_v_node];init=0.)
         is_placed[v_node] = true
         is_available[selected_node] = false
         for v_neigh in neighbors(v_g, v_node)
@@ -175,6 +167,23 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
                     in_frontier[v_neigh] = true
                     push!(frontier, v_neigh)
                 end
+            end
+        end
+    end
+
+    placement_cost = 0
+    for v_node in v_subgraph.nodes
+        curr_placement = partial_placement[v_node]
+        placement_cost += (vn_dem[v_node] * sn_cost[curr_placement] - duals.node_1t1[curr_placement])/v_subgraph.nb_appearance_nodes[v_node]
+        placement_cost -= sum( duals.flow_conservation[curr_placement, v_edge]/v_subgraph.nb_appearance_nodes[v_node] + duals.flow_departure[curr_placement, v_edge]/v_subgraph.nb_appearance_nodes[v_node] for v_edge in v_subgraph.cut_edges_src[v_node]; init=0.)
+        placement_cost += sum( duals.flow_conservation[curr_placement, v_edge]/v_subgraph.nb_appearance_nodes[v_node] for v_edge in v_subgraph.cut_edges_dst[v_node];init=0.)
+        if v_node ∈ v_subgraph.overlapping_nodes
+            idx = v_subgraph.idx_overlapping[v_node]
+            placement_cost += duals.overlapping[curr_placement, v_node, idx]
+            if idx < v_subgraph.nb_appearance_nodes[v_node]
+                placement_cost -= duals.overlapping[curr_placement, v_node, idx+1]
+            else
+                placement_cost -= duals.overlapping[curr_placement, v_node, 1]
             end
         end
     end

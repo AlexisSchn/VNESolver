@@ -10,6 +10,28 @@ function solve_flow_formulation(
     time_beginning = time()
 
     model = Model(CPLEX.Optimizer)
+
+    set_optimizer_attribute(model, "CPX_PARAM_RANDOMSEED", 2)
+
+    # Disable specific cut types individually
+    set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_Cliques", -1)
+    set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_Covers", -1)
+    set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_Gomory", -1)
+    #set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_ZeroHalfCut", -1)
+    set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_MIRCut", -1)
+    set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_Implied", -1)
+    set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_FlowCovers", -1)
+    set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_LiftProj", -1)
+
+    # Primary parameter to disable presolve
+
+    set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Presolve", 0)
+
+    # Optional: Disable aggregator and primal/dual reductions for a 100% raw model
+    set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Aggregator", 0)
+    set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Reduce", 0)
+
+
     set_up_formulation!(model, instance)
     set_time_limit_sec(model, time_limit)
     
@@ -34,6 +56,8 @@ function solve_flow_formulation_linear(instance::Instance)
 
     model = Model(CPLEX.Optimizer)
     set_up_formulation!(model, instance)
+
+
     relax_integrality(model)
 
     set_time_limit_sec(model, solve_time)
@@ -87,6 +111,11 @@ function set_up_formulation!(model, instance)
         end
     end
 
+
+    # tkt meme pas (4 => 38, 11 => 61, 2 => 16, 8 => 34, 3 => 28, 1 => 47)
+    #fix(x[11, 47], 1; force=true)
+
+    
     for v_edge in edges(v_g), s_edge in edges(s_g)
         if ve_dem[src(v_edge), dst(v_edge)] > se_cap[src(s_edge), dst(s_edge)]
             fix(y[v_edge, s_edge], 0; force=true)

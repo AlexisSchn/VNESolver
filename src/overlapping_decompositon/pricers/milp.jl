@@ -77,7 +77,7 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
 
     # updating costs
     placement_cost = @expression(model, 
-        sum( ( sn_cost[s_node] * vn_dem[v_node] - duals.node_1t1[s_node] ) * model[:x][v_node, s_node] 
+        sum( ( sn_cost[s_node] * vn_dem[v_node] - duals.node_1t1[s_node] ) * model[:x][v_node, s_node] / v_subgraph.nb_appearance_nodes[v_node]
             for v_node in v_subgraph.nodes for s_node in vertices(s_g) ))
   
                
@@ -87,19 +87,43 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
                 for v_edge in v_subgraph.edges for s_edge in edges(s_g) ))
 
 
-            
+    overlapping_cost = AffExpr(0.)
+    for v_node in v_subgraph.overlapping_nodes, s_node in vertices(s_g)
+        idx=v_subgraph.idx_overlapping[v_node]
+        add_to_expression!(
+            overlapping_cost, 
+            duals.overlapping[s_node, v_node, idx], 
+            model[:x][v_node,s_node]
+        )
+        if idx < v_subgraph.nb_appearance_nodes[v_node]
+            add_to_expression!(
+                overlapping_cost, 
+                -duals.overlapping[s_node, v_node, idx+1], 
+                model[:x][v_node,s_node]
+            )
+        else
+            add_to_expression!(
+                overlapping_cost,
+                -duals.overlapping[s_node, v_node, 1], 
+                model[:x][v_node,s_node]
+            )
+        end
+
+    end
+
+    
     # flow conservation
     flow_conservation_cost = @expression( model, 
         sum(
-            - sum(duals.flow_conservation[s_node, cut_edge] * model[:x][src(cut_edge), s_node] for cut_edge in v_subgraph.cut_edges_with_src[i_node])
-            + sum(duals.flow_conservation[s_node, cut_edge] * model[:x][dst(cut_edge), s_node]  for cut_edge in v_subgraph.cut_edges_with_dst[i_node])
-                for s_node in vertices(s_g), i_node in 1:length(v_subgraph.nodes) )
+            - sum(duals.flow_conservation[s_node, cut_edge] * model[:x][src(cut_edge), s_node] / v_subgraph.nb_appearance_nodes[src(cut_edge)] for cut_edge in v_subgraph.cut_edges_src[v_node])
+            + sum(duals.flow_conservation[s_node, cut_edge] * model[:x][dst(cut_edge), s_node] / v_subgraph.nb_appearance_nodes[dst(cut_edge)]   for cut_edge in v_subgraph.cut_edges_dst[v_node])
+                for s_node in vertices(s_g), v_node in v_subgraph.nodes )
     )
     
     # departure
     departure_costs = @expression( model,
-        - sum( duals.flow_departure[s_node, cut_edge] * model[:x][src(cut_edge), s_node] 
-            for s_node in vertices(s_g), i_node in 1:length(v_subgraph.nodes), cut_edge in v_subgraph.cut_edges_with_src[i_node])
+        - sum( duals.flow_departure[s_node, cut_edge] * model[:x][src(cut_edge), s_node] / v_subgraph.nb_appearance_nodes[src(cut_edge)] 
+            for s_node in vertices(s_g), v_node in v_subgraph.nodes, cut_edge in v_subgraph.cut_edges_src[v_node])
     )
 
 
@@ -109,6 +133,7 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
         + placement_cost + routing_cost 
         + flow_conservation_cost 
         + departure_costs
+        + overlapping_cost
     );
 
     # solving

@@ -1,29 +1,32 @@
 
 
-
 # heuristic/tools.jl
 # Define some struct and functions that are useful for the heuristics
 
-struct DynamicWeightMatrix <: AbstractMatrix{Float64}
+struct DynamicWeightMatrixSubgraph <: AbstractMatrix{Float64}
     base_dist::Matrix{Float64}    
     capacities::Matrix{Int}                   
-    demand::Int   
+    demand::Int                                  
+    allowed_edges::BitMatrix                     
 end
 
 # Implement the minimum required Interface for Graphs.jl distance matrix
-Base.size(d::DynamicWeightMatrix) = size(d.base_dist)
-@inline function Base.getindex(d::DynamicWeightMatrix, u::Int, v::Int)
+Base.size(d::DynamicWeightMatrixSubgraph) = size(d.base_dist)
+@inline function Base.getindex(d::DynamicWeightMatrixSubgraph, u::Int, v::Int)
+    if !d.allowed_edges[u, v]
+        return Inf
+    end
     if d.capacities[u, v] < d.demand
         return Inf
     else
-        return d.base_dist[u, v] 
+        return d.base_dist[u, v]
     end
 end
 
 
 
 
-function shortest_path_routing!(edge_routing, instance::Instance, v_node_placement::Vector{Int}, v_subgraph::Subgraph, modified_se_cost::Matrix)
+function shortest_path_routing!(edge_routing, instance::Instance, v_node_placement::Vector{Int}, v_subgraph::Subgraph, modified_se_cost::Matrix, allowed_s_edges::BitMatrix)
 
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
@@ -50,8 +53,7 @@ function shortest_path_routing!(edge_routing, instance::Instance, v_node_placeme
         demand_curr_edge = ve_dem[src(v_edge), dst(v_edge)]
         s_src = v_node_placement[src(v_edge)]
         s_dst = v_node_placement[dst(v_edge)]
-         
-        current_weights = DynamicWeightMatrix(modified_se_cost, se_cap_copy, demand_curr_edge) # virtual matrix, much faster
+        current_weights = DynamicWeightMatrixSubgraph(modified_se_cost, se_cap_copy, demand_curr_edge, allowed_s_edges) # virtual matrix, much faster
 
         edges_of_path = a_star(s_dir, s_src, s_dst, current_weights)
 
@@ -75,10 +77,12 @@ function shortest_path_routing!(edge_routing, instance::Instance, v_node_placeme
 
     return routing_cost
 
+
 end
 
 
-function complete_partial_placement!(partial_placement::Vector{Int}, instance::Instance, dists::Matrix, v_subgraph::Subgraph, duals::DualValues)
+
+function complete_partial_placement!(partial_placement::Vector{Int}, instance::Instance, dists, v_subgraph::Subgraph, s_subgraph::Subgraph, duals::DualValues)
 
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
@@ -94,8 +98,12 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
     placement_v_neighbors   = Vector{Int}()
     sizehint!(placement_v_neighbors, nb_nodes)
     
-    # Loop
-    placement_cost  = 0
+    # Create a mask initialized to false
+    allowed_s_nodes = falses(nv(s_g))
+    for node in s_subgraph.nodes
+        allowed_s_nodes[node] = true
+    end
+
 
     # Initialization
     for v_node in v_subgraph.nodes
@@ -103,10 +111,6 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
             is_placed[v_node] = true
             curr_placement = partial_placement[v_node]
             is_available[curr_placement] = false
-            placement_cost += vn_dem[v_node] * sn_cost[curr_placement] - duals.node_1t1[curr_placement]
-            i_node = v_subgraph.idx_of_nodes[v_node]
-            placement_cost -= sum( duals.flow_conservation[curr_placement, v_edge] + duals.flow_departure[curr_placement, v_edge] for v_edge in v_subgraph.cut_edges_with_src[i_node]; init=0.)
-            placement_cost += sum( duals.flow_conservation[curr_placement, v_edge] for v_edge in v_subgraph.cut_edges_with_dst[i_node];init=0.)
         end
     end
 
@@ -127,6 +131,7 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
         end
     end
 
+
     while !isempty(frontier)
 
         shuffle!(frontier)
@@ -145,7 +150,7 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
             end
         end
         
-        @. scores = ifelse(is_available & (sn_cap >= curr_demand), 0.0, Inf)
+        @. scores = ifelse(is_available & (sn_cap >= curr_demand) & allowed_s_nodes, 0.0, Inf)
 
         for p_neigh in placement_v_neighbors
             #@views scores .+= shortest_paths.dists[:,p_neigh ]
@@ -163,10 +168,6 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
         end
 
         partial_placement[v_node] = selected_node
-        placement_cost += sn_cost[selected_node] * curr_demand - duals.node_1t1[selected_node]
-        i_v_node = v_subgraph.idx_of_nodes[v_node]
-        placement_cost -= sum( duals.flow_conservation[selected_node, v_edge] + duals.flow_departure[selected_node, v_edge] for v_edge in v_subgraph.cut_edges_with_src[i_v_node];init=0.)
-        placement_cost += sum( duals.flow_conservation[selected_node, v_edge] for v_edge in v_subgraph.cut_edges_with_dst[i_v_node];init=0.)
         is_placed[v_node] = true
         is_available[selected_node] = false
         for v_neigh in neighbors(v_g, v_node)
@@ -179,6 +180,24 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
         end
     end
 
+    placement_cost = 0
+    for v_node in v_subgraph.nodes
+        curr_placement = partial_placement[v_node]
+        placement_cost += (vn_dem[v_node] * sn_cost[curr_placement] - duals.node_1t1[curr_placement])/v_subgraph.nb_appearance_nodes[v_node]
+        placement_cost -= sum( duals.flow_conservation[curr_placement, v_edge]/v_subgraph.nb_appearance_nodes[v_node] + duals.flow_departure[curr_placement, v_edge]/v_subgraph.nb_appearance_nodes[v_node] for v_edge in v_subgraph.cut_edges_src[v_node]; init=0.)
+        placement_cost += sum( duals.flow_conservation[curr_placement, v_edge]/v_subgraph.nb_appearance_nodes[v_node] for v_edge in v_subgraph.cut_edges_dst[v_node];init=0.)
+        if v_node ∈ v_subgraph.overlapping_nodes
+            idx = v_subgraph.idx_overlapping[v_node]
+            placement_cost += duals.overlapping[curr_placement, v_node, idx]
+            if idx < v_subgraph.nb_appearance_nodes[v_node]
+                placement_cost -= duals.overlapping[curr_placement, v_node, idx+1]
+            else
+                placement_cost -= duals.overlapping[curr_placement, v_node, 1]
+            end
+        end
+    end
+
+
     return placement_cost
 end
         
@@ -186,7 +205,7 @@ end
 
 
 
-function solve_greedy_pricer(instance::Instance, v_subgraph::Subgraph, duals::DualValues, current_dists::Matrix, modified_se_cost::Matrix; nb_greedy = 100, time_max = 10)
+function solve_greedy_sub_pricer(instance::Instance, v_subgraph::Subgraph, s_subgraph::Subgraph, duals::DualValues, current_dists::Matrix, modified_se_cost::Matrix; nb_greedy = 100, time_max = 10)
     time_beginning = time()
 
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
@@ -207,6 +226,13 @@ function solve_greedy_pricer(instance::Instance, v_subgraph::Subgraph, duals::Du
         sizehint!(best_routing[i], nv(s_g))
     end
 
+    allowed_s_edges = falses(nv(s_g), nv(s_g))
+    for edge in s_subgraph.edges
+        u, v = src(edge), dst(edge)
+        allowed_s_edges[u, v] = true
+        allowed_s_edges[v, u] = true # Keep it symmetric for undirected lookups
+    end
+
     
     # Loop tools
     best_cost       = Inf
@@ -217,10 +243,13 @@ function solve_greedy_pricer(instance::Instance, v_subgraph::Subgraph, duals::Du
     
         start_node = rand(v_subgraph.nodes)
         possible_start_s_node = Vector{Int}()
-        for s_node in vertices(s_g)
+        for s_node in s_subgraph.nodes
             if sn_cap[s_node] >= vn_dem[start_node]
                 push!(possible_start_s_node, s_node)
             end
+        end
+        if isempty(possible_start_s_node)
+            continue
         end
         s_node_start = rand(possible_start_s_node)
         placement .= 0
@@ -229,10 +258,10 @@ function solve_greedy_pricer(instance::Instance, v_subgraph::Subgraph, duals::Du
         end
 
         placement[start_node] = s_node_start
-        placement_cost = complete_partial_placement!(placement, instance, current_dists, v_subgraph, duals) 
+        placement_cost = complete_partial_placement!(placement, instance, current_dists, v_subgraph, s_subgraph, duals) 
 
         if placement_cost < Inf
-            routing_cost = shortest_path_routing!(routing, instance, placement, v_subgraph, modified_se_cost)
+            routing_cost = shortest_path_routing!(routing, instance, placement, v_subgraph, modified_se_cost, allowed_s_edges)
         else
             routing_cost = Inf
         end
