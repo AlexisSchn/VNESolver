@@ -9,7 +9,7 @@ function solve_overlapping_decomposition(instance::Instance; parameters::Overlap
 
     # Compute the partition
     #v_partition = [[i] for i in 1:nv(v_g)]
-    #v_partition = star_partition(v_g)
+    v_partition = star_partition(v_g)
     v_partition = [[1, 2, 3, 11], [5, 6, 9, 11], [4, 7, 12], [8], [10]] # toy instance [[1, 2, 3, 11], [5, 6, 9], [4, 7, 12], [8], [10]] 
     v_partition = [[15, 16, 17, 18, 19, 24, 26], [1, 2, 20, 21, 22, 27], [9, 10, 11, 12, 13, 15], [4, 5, 6, 14], [3], [7], [8], [23], [25]]
     println("Partition: $v_partition")

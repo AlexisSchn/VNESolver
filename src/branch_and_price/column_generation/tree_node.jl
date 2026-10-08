@@ -65,7 +65,6 @@ function solve_column_generation_node!(
     end
 
 
-    #println("Starting column generation...")
 
     # ------- Greedy part
     keep_on=true
@@ -130,7 +129,6 @@ function solve_column_generation_node!(
     end
 
 
-    #println("MILP TIME!")
 
     keep_on=true
     optimize!(model_master)
@@ -199,7 +197,7 @@ function solve_column_generation_node!(
     # BRANCHING PART...
     # Has to be done here, i guess :(
     optimize!(model_master)
-    if objective_value(model_master) > 10e4
+    if objective_value(model_master) > 10e5 # why this value here? Idk what you are trying to achieve...
         # Unfixing the stuff
         unique!(columns_to_unfix)
         for column in columns_to_unfix
@@ -207,8 +205,20 @@ function solve_column_generation_node!(
             set_lower_bound(column.variable, 0.0)
             set_upper_bound(column.variable, 1.)
         end
+        println("Large value for master problem $(objective_value(model_master)), but got $lg_bound LBG")
         return lg_bound, Inf
     end
+
+
+    all_integer = check_if_all_columns_are_integer(columns)
+    if all_integer 
+        # we may have a nice solution, let's try it
+
+        print("everything is integr!")
+
+        # 
+    end
+
 
     (v_node, s_node) = first_idea(model_master, instance, v_decomposition, columns)
 
@@ -253,3 +263,21 @@ function solve_column_generation_node!(
 end
 
 
+function check_if_all_columns_are_integer(columns)
+
+    for v_subgraph in keys(columns)
+        subgraph_is_integer = false
+        for column in columns[v_subgraph]
+            if value(column.variable) > 0.999
+                subgraph_is_integer = true
+                break
+            end
+        end
+        if !subgraph_is_integer
+            return false
+        end
+    end
+
+    return true
+
+end

@@ -9,3 +9,5 @@ julia --project=.
 And you will need: CPLEX, KaHIP
 
 
+# TODO
+Do a checker on the branch and price, the subgraphs MUST be connected

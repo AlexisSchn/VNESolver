@@ -12,9 +12,11 @@ function solve_branch_price(instance::Instance)
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
 
     # Compute the partition
-    v_partition = [[1, 2, 3, 11], [5, 6, 9, 11], [4, 7, 12], [8], [10]] # toy instance [[1, 2, 3, 11], [5, 6, 9], [4, 7, 12], [8], [10]] 
+    #v_partition = [[1, 2, 3, 11], [5, 6, 9, 11], [4, 7, 12], [8], [10]] # toy instance [[1, 2, 3, 11], [5, 6, 9], [4, 7, 12], [8], [10]] 
     #v_partition = [[15, 16, 17, 18, 19, 24, 26], [1, 2, 20, 21, 22, 27], [9, 10, 11, 12, 13, 15], [4, 5, 6, 14], [3], [7], [8], [23], [25]]
-    #v_partition = [[i_node] for i_node in 1:nv(v_g)]
+    v_partition = [[i_node] for i_node in 1:nv(v_g)]
+    v_partition = [[1, 7, 8, 9, 10, 12, 15], [2, 3, 4, 5, 6], [11, 13, 14]]
+
     println("Partition: $v_partition")
     v_decomposition = set_up_virtual_decomposition(instance.v_network.graph, v_partition)
 
@@ -82,10 +84,13 @@ function solve_branch_price(instance::Instance)
     
     time_overall = time() - time_beginning
     best_ub = Inf
+    time_max = 100
+    nb_nodes_max = 5000
+    
 
-    # To pop the node with the BEST (lowest) bound:
+
     iter = 0
-    while !isempty(tree_queue) && iter < 5000
+    while !isempty(tree_queue) && iter < nb_nodes_max && time()-time_beginning < time_max
         current_node = dequeue!(tree_queue)
         time_overall = time() - time_beginning
         #println("Current node branching:\n $(current_node.branching.placement)\n$(current_node.branching.zoning)")
