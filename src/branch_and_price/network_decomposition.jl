@@ -1,24 +1,7 @@
 
 
 
-struct Subgraph
-    nodes::Vector{Int}
-    edges::Vector{Edge}
-    cut_edges_src::Vector{Vector{Edge}}
-    cut_edges_dst::Vector{Vector{Edge}}
-    idx_of_nodes::Vector{Int}
-    overlapping_nodes::Vector{Int}
-    idx_overlapping::Vector{Int}
-    nb_appearance_nodes::Vector{Int}
-end
 
-
-struct OverlappingVirtualDecomposition
-    subgraphs::Vector{Subgraph}
-    cut_edges::Vector{Edge}
-    overlapping_nodes::Vector{Int}
-    nb_appearance_nodes::Vector{Int}
-end
 
 function set_up_virtual_decomposition(graph::Graph, partition::Vector{Vector{Int}})
 

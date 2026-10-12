@@ -45,40 +45,20 @@ function solve_branch_price(instance::Instance)
 
 
     # 2 ) Solve root node relaxation
-    lg_bound = solve_column_generation_root_node!(model_master, columns, instance, v_decomposition, pricers)
+    lg_bound, dual_costs = solve_column_generation_root_node!(model_master, columns, instance, v_decomposition, pricers)
     # Should also get the relaxation itself here! To help with branching. Or I can do it myself here...
 
-
-    # 3 ) Heuristics at root node
-    # Will do later. Need to copypasta my other functions. Also, for now, I'm not sure it's super helpful.
-    upper_bond = Inf
 
 
     # 4) LOOP TIME
     println("\n\nStarting Branch&Price")
-    nb_node_created = 1
 
-    tree_queue = PriorityQueue{TreeNode, Float64}()
+    bnp_state = BranchAndPriceState(instance, v_decomposition, model_master, columns, pricers)
+    
+    # first branching
+    root_node = TreeNode(0, 0, Branching(), 0.) # need to create this
+    branch_or_prune(bnp_state, root_node, lg_bound, dual_costs)
 
-    optimize!(model_master)
-    (v_node, s_node) = first_idea(model_master, instance, v_decomposition, columns)
-
-    # branching decision:
-
-    # left
-    nb_node_created +=1
-    bleft = Branching()
-    bleft.placement_mandatory[v_node] = s_node
-    node = TreeNode(nb_node_created, 1, bleft, lg_bound)
-    enqueue!(tree_queue, node, node.lower_bound)
-
-    # right
-    nb_node_created +=1
-    bright = Branching()
-    bright.placement_allowed[v_node] = setdiff(vertices(s_g), [s_node])
-    node = TreeNode(nb_node_created, 1, bright, lg_bound)
-    enqueue!(tree_queue, node, node.lower_bound)
-        
     
     time_overall = time() - time_beginning
     best_ub = Inf
@@ -86,31 +66,28 @@ function solve_branch_price(instance::Instance)
     nb_nodes_max = 5000
     
 
-
     iter = 0
-    while !isempty(tree_queue) && iter < nb_nodes_max && time()-time_beginning < time_max
+    tree_queue = bnp_state.tree_queue
+
+    while !isempty(tree_queue) && iter < nb_nodes_max && time() - time_beginning < time_max
+
         current_node = dequeue!(tree_queue)
-        time_overall = time() - time_beginning
-        #println("Current node branching:\n $(current_node.branching.placement)\n$(current_node.branching.zoning)")
        
-        lg_bound, integer_value = solve_column_generation_node!(model_master, columns, instance, v_decomposition, pricers, current_node, tree_queue, nb_node_created, best_ub)
+        lg_bound = solve_column_generation_node!(bnp_state, current_node)
 
-        # update stuff: best solution, etc.
-        if !isinf(integer_value) && integer_value < best_ub
-            best_ub = integer_value
-            println("New best solution found!")
-        end
-        best_lb = peek(tree_queue)[2]
-        for (node, bound) in tree_queue.xs
-            if bound > best_ub
-                delete!(tree_queue, node)
-            end
+        # prune: collect first, then delete
+        to_delete = [node for (node, bound) in tree_queue if threshold_ceil(bound) >= bnp_state.best_solution - 0.01]
+        for node in to_delete
+            delete!(tree_queue, node)
         end
 
-        gap = (best_ub - best_lb) / best_ub
-        @printf("Iter %-3d; UB: %8i;  LB: %6.3f,   Nodes left: %3d;   Current node: %3d   Time %5.3f;    Gap %2.3f\n", 
-            iter, best_ub, best_lb, length(tree_queue), 0, time_overall, gap)
+        best_lb = isempty(tree_queue) ? bnp_state.best_solution : peek(tree_queue)[2]
 
+        gap = (bnp_state.best_solution - best_lb) / best_ub
+        time_overall = time() - time_beginning
+
+        @printf("Iter %-3d; UB: %8.1f;  LB: %6.3f,   Nodes left: %3d;   Current node: %3d   Time %5.3f;    Gap %2.3f\n",
+            iter, bnp_state.best_solution, best_lb, length(tree_queue), current_node.id, time_overall, gap)
 
         time_overall = time() - time_beginning
         iter += 1

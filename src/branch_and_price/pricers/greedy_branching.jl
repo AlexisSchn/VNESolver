@@ -174,7 +174,7 @@ function solve_greedy_pricer_branching(instance::Instance, v_subgraph::Subgraph,
                 end
             end
             if !isempty(v_node_zoning)
-                start_node = rand(keys(branching.placement_allowed))
+                start_node = rand(v_node_zoning)
                 possible_start_s_node = Vector{Int}()
                 for s_node in branching.placement_allowed[start_node]
                     if sn_cap[s_node] >= vn_dem[start_node]
@@ -192,8 +192,7 @@ function solve_greedy_pricer_branching(instance::Instance, v_subgraph::Subgraph,
                     end
                 end
                 s_node_start = rand(possible_start_s_node)
-                placement[start_node] = s_node_start
-
+                placement[start_node] = s_node_start 
             end
         end
         for i_edge in 1:length(v_subgraph.edges)

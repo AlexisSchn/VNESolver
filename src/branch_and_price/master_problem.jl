@@ -1,9 +1,5 @@
 
 
-struct Column
-    variable
-    submapping::Mapping
-end
 
 
 function set_up_master_problem!(model_master::Model, instance::Instance, v_decomposition::OverlappingVirtualDecomposition)

@@ -1,4 +1,11 @@
-function solve_column_generation_root_node!(model_master::Model, columns, instance::Instance, v_decomposition::OverlappingVirtualDecomposition, pricers)
+
+
+function solve_column_generation_root_node!(
+        model_master::Model,
+        columns, instance::Instance, 
+        v_decomposition::OverlappingVirtualDecomposition, 
+        pricers
+    )
 
     time_beginning = time()
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
@@ -14,8 +21,8 @@ function solve_column_generation_root_node!(model_master::Model, columns, instan
 
     time_max            = 1000
     nb_iter_max         = 1000
-    gap_min             = 0.05
-    stabilization_coeff = 0.
+    gap_min             = 0.01
+    stabilization_coeff = 0.0
     keep_on             = true
 
     time_overall        = time() - time_beginning
@@ -44,16 +51,15 @@ function solve_column_generation_root_node!(model_master::Model, columns, instan
         push!(clusters[part[s_node]], s_node)
     end
 
-    println("Clusters: $clusters")
+    #println("Clusters: $clusters")
 
     # Now, let's augment it!
     nb_nodes_min = size_max_v_subgraph * 3
     complete_clusters!(clusters, s_g, nb_nodes_min)
-    println("Clusters: $clusters")
 
-    print("SUBSTRATE DECOMPO:")
     s_subgraphs = set_up_substrate_subgraphs(s_g, clusters)
-    print_stuff_subgraphs(s_subgraphs)
+    #print("For greedy subpricers, substrate decomposition:")
+    #print_stuff_subgraphs(s_subgraphs)
 
     #initialization_greedy!(model_master, columns, instance, v_decomposition, s_subgraphs)
 
@@ -121,7 +127,6 @@ function solve_column_generation_root_node!(model_master::Model, columns, instan
     end
 
     # ------- Greedy part
-    println("Switching to th classical greedy thing!")
     keep_on=true
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
         
@@ -183,8 +188,6 @@ function solve_column_generation_root_node!(model_master::Model, columns, instan
 
     end
 
-    println("MILP TIME!")
-
     keep_on     = true
     branching   = Branching()
     optimize!(model_master)
@@ -244,7 +247,7 @@ function solve_column_generation_root_node!(model_master::Model, columns, instan
 
     println("Finished with $lg_bound after $time_overall with $time_pricer for pricer and $time_rmp for RMP")
 
-    return lg_bound
+    return lg_bound, dual_costs
 
 end
 
