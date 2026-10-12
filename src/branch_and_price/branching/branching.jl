@@ -2,9 +2,18 @@
 
 
 struct Branching
-    placement::Dict{Int, Int}
-    zoning::Dict{Int, Vector{Int}}
+    placement_mandatory::Dict{Int, Int}
+    placement_allowed::Dict{Int, Vector{Int}}
+    routing_mandatory::Dict{Edge, Edge}
+    routing_forbidden::Dict{Edge, Vector{Edge}}
 end
+
+Branching() = Branching(
+    Dict{Int, Int}(),
+    Dict{Int, Vector{Int}}(),
+    Dict{Edge, Edge}(),
+    Dict{Edge, Vector{Edge}}()
+)
 
 
 struct TreeNode

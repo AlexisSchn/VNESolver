@@ -14,7 +14,7 @@ function solve_branch_price(instance::Instance)
     # Compute the partition
     #v_partition = [[1, 2, 3, 11], [5, 6, 9, 11], [4, 7, 12], [8], [10]] # toy instance [[1, 2, 3, 11], [5, 6, 9], [4, 7, 12], [8], [10]] 
     #v_partition = [[15, 16, 17, 18, 19, 24, 26], [1, 2, 20, 21, 22, 27], [9, 10, 11, 12, 13, 15], [4, 5, 6, 14], [3], [7], [8], [23], [25]]
-    v_partition = [[i_node] for i_node in 1:nv(v_g)]
+    #v_partition = [[i_node] for i_node in 1:nv(v_g)]
     v_partition = [[1, 7, 8, 9, 10, 12, 15], [2, 3, 4, 5, 6], [11, 13, 14]]
 
     println("Partition: $v_partition")
@@ -66,25 +66,23 @@ function solve_branch_price(instance::Instance)
     # branching decision:
 
     # left
-    p = Dict{Int, Int}()
-    d = Dict{Int, Vector{Int}}()
-    p[v_node] = s_node
     nb_node_created +=1
-    node = TreeNode(nb_node_created, 1, Branching(p, d), lg_bound)
+    bleft = Branching()
+    bleft.placement_mandatory[v_node] = s_node
+    node = TreeNode(nb_node_created, 1, bleft, lg_bound)
     enqueue!(tree_queue, node, node.lower_bound)
 
     # right
-    p = Dict{Int, Int}()
-    d = Dict{Int, Vector{Int}}()
-    d[v_node] = setdiff(vertices(s_g), [s_node])
     nb_node_created +=1
-    node = TreeNode(nb_node_created, 1, Branching(p, d), lg_bound)
+    bright = Branching()
+    bright.placement_allowed[v_node] = setdiff(vertices(s_g), [s_node])
+    node = TreeNode(nb_node_created, 1, bright, lg_bound)
     enqueue!(tree_queue, node, node.lower_bound)
         
     
     time_overall = time() - time_beginning
     best_ub = Inf
-    time_max = 100
+    time_max = 500
     nb_nodes_max = 5000
     
 
@@ -95,8 +93,7 @@ function solve_branch_price(instance::Instance)
         time_overall = time() - time_beginning
         #println("Current node branching:\n $(current_node.branching.placement)\n$(current_node.branching.zoning)")
        
-        lg_bound, integer_value = solve_column_generation_node!(model_master, columns, instance, v_decomposition, pricers, current_node, tree_queue, nb_node_created)
-        
+        lg_bound, integer_value = solve_column_generation_node!(model_master, columns, instance, v_decomposition, pricers, current_node, tree_queue, nb_node_created, best_ub)
 
         # update stuff: best solution, etc.
         if !isinf(integer_value) && integer_value < best_ub
@@ -111,7 +108,7 @@ function solve_branch_price(instance::Instance)
         end
 
         gap = (best_ub - best_lb) / best_ub
-        @printf("Iter %-3d; UB: %8.3f;  LB: %6.3f,   Nodes left: %3d;   Current node: %3d   Time %5.3f;    Gap %2.3f\n", 
+        @printf("Iter %-3d; UB: %8i;  LB: %6.3f,   Nodes left: %3d;   Current node: %3d   Time %5.3f;    Gap %2.3f\n", 
             iter, best_ub, best_lb, length(tree_queue), 0, time_overall, gap)
 
 

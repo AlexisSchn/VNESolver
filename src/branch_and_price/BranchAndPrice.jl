@@ -26,6 +26,18 @@ struct BranchAndPriceParameters <: AbstractSolverParameters
     stab_coeff::Float64
 end
 
+#=
+# Would be useful at some point (soon)
+struct BranchAndPriceState
+    best_solution::Int
+    lgb::Float64
+    nb_nodes::Int
+    nb_nodes_remaning::Int
+    #status::Status
+    tree_queue::PriorityQueue{TreeNode, Float64}
+end
+=#
+
 function BranchAndPriceParameters()
     return BranchAndPriceParameters(
         500.,

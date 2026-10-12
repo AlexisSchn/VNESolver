@@ -65,9 +65,9 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
             end
         end
         
-        if v_node ∈ keys(branching.zoning)
+        if v_node ∈ keys(branching.placement_allowed)
             is_allowed = falses(nv(s_g))
-            for s_node in branching.zoning[v_node]
+            for s_node in branching.placement_allowed[v_node]
                 is_allowed[s_node] = true
             end
         else
@@ -128,7 +128,7 @@ end
 
 
 
-function solve_greedy_pricer_branchig(instance::Instance, v_subgraph::Subgraph, duals::DualValues, current_dists::Matrix, modified_se_cost::Matrix, branching::Branching; nb_greedy = 100, time_max = 10)
+function solve_greedy_pricer_branching(instance::Instance, v_subgraph::Subgraph, duals::DualValues, current_dists::Matrix, modified_se_cost::Matrix, branching::Branching; nb_greedy = 100, time_max = 10)
     time_beginning = time()
 
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
@@ -160,7 +160,7 @@ function solve_greedy_pricer_branchig(instance::Instance, v_subgraph::Subgraph, 
         placement .= 0
         still_init = true
 
-        for (v_node, s_node) in branching.placement
+        for (v_node, s_node) in branching.placement_mandatory
             if v_node ∈ v_subgraph.nodes
                 placement[v_node] = s_node
                 still_init = false
@@ -168,15 +168,15 @@ function solve_greedy_pricer_branchig(instance::Instance, v_subgraph::Subgraph, 
         end
         if still_init
             v_node_zoning = Int[]
-            for v_node in keys(branching.zoning)
+            for v_node in keys(branching.placement_allowed)
                 if v_node ∈ v_subgraph.nodes
                     push!(v_node_zoning, v_node)
                 end
             end
             if !isempty(v_node_zoning)
-                start_node = rand(keys(branching.zoning))
+                start_node = rand(keys(branching.placement_allowed))
                 possible_start_s_node = Vector{Int}()
-                for s_node in branching.zoning[start_node]
+                for s_node in branching.placement_allowed[start_node]
                     if sn_cap[s_node] >= vn_dem[start_node]
                         push!(possible_start_s_node, s_node)
                     end

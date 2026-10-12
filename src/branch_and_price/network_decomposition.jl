@@ -94,7 +94,6 @@ end
 
 
 
-
 function set_up_substrate_subgraphs(graph::Graph, partition::Vector{Vector{Int}})
 
     # Setting the decomposition

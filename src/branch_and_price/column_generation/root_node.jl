@@ -186,7 +186,7 @@ function solve_column_generation_root_node!(model_master::Model, columns, instan
     println("MILP TIME!")
 
     keep_on     = true
-    branching   = Branching(Dict{Int, Int}(), Dict{Int, Vector{Int}}())
+    branching   = Branching()
     optimize!(model_master)
     dual_costs  = DualValues(model_master)
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
@@ -348,3 +348,6 @@ function add_edge_columns!(model_master, columns, instance::Instance, v_decompos
 
     println("$nb_cols_added columns added during init")
 end
+
+
+

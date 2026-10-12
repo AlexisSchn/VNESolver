@@ -143,13 +143,13 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
     # zoning does not know about capacities. So you need to be careful, to not unfix an impossible x!
     variables_to_unfix=VariableRef[]
     for v_node in v_subgraph.nodes
-        if v_node ∈ keys(branching.placement)
-            s_node = branching.placement[v_node]
+        if v_node ∈ keys(branching.placement_mandatory)
+            s_node = branching.placement_mandatory[v_node]
             fix(model[:x][v_node, s_node], 1, force=true)
             push!(variables_to_unfix, model[:x][v_node, s_node])
         end
-        if v_node ∈ keys(branching.zoning)
-            forbidden_nodes = setdiff(vertices(s_g), branching.zoning[v_node])
+        if v_node ∈ keys(branching.placement_allowed)
+            forbidden_nodes = setdiff(vertices(s_g), branching.placement_allowed[v_node])
             for s_node in forbidden_nodes
                 if sn_cap[s_node] >= vn_dem[v_node] # otherwise, it's already fixed to 0!
                     fix(model[:x][v_node, s_node], 0, force=true)

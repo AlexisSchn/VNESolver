@@ -20,11 +20,12 @@ function graph_to_csr(g::Graph)
     return xadj, adjncy
 end
 
-include("kahip_wrapper.jl")
+#include("kahip_wrapper.jl")
 include("metis_wrapper.jl")
 include("topologies.jl")
 
-export partition_kahip, partition_metis
+# export partition_kahip
+export partition_metis
 export edge_decomposition
 
 end # module
