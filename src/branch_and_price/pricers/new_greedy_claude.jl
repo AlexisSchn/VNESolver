@@ -1,9 +1,141 @@
 
 
+ # OK LETS GO
+
+# ==== ROUTING STUFF
+
+struct DynamicWeightMatrix <: AbstractMatrix{Float64}
+    base_dist::Matrix{Float64}    
+    capacities::Matrix{Int}                   
+    demand::Int   
+end
+
+# Implement the minimum required Interface for Graphs.jl distance matrix
+Base.size(d::DynamicWeightMatrix) = size(d.base_dist)
+@inline function Base.getindex(d::DynamicWeightMatrix, u::Int, v::Int)
+    if d.capacities[u, v] < d.demand
+        return Inf
+    else
+        return d.base_dist[u, v] 
+    end
+end
 
 
 
-function complete_partial_placement!(partial_placement::Vector{Int}, instance::Instance, dists::Matrix, v_subgraph::Subgraph, duals::DualValues, branching::Branching)
+function shortest_path_routing!(edge_routing, instance::Instance, v_node_placement::Vector{Int}, v_subgraph::Subgraph, modified_se_cost::Matrix)
+
+    v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
+    s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
+    
+    # Allocations
+    se_cap_copy = copy(se_cap) # TODO : changing?
+    nodes_of_path = Vector{Int}()
+    sizehint!(nodes_of_path, nv(s_g))
+    
+    # Tools
+    routing_cost    = 0
+    virtual_edges   = collect(v_subgraph.edges)
+
+    # Loop
+    idx_edges       = Vector(1:length(virtual_edges))
+    shuffle!(idx_edges) # routing in a random order. TODO consider the demand/topology
+    for i_edge in idx_edges
+
+        if !isempty(edge_routing[i_edge])
+            continue
+        end
+
+        v_edge = virtual_edges[i_edge]
+        demand_curr_edge = ve_dem[src(v_edge), dst(v_edge)]
+        s_src = v_node_placement[src(v_edge)]
+        s_dst = v_node_placement[dst(v_edge)]
+         
+        current_weights = DynamicWeightMatrix(modified_se_cost, se_cap_copy, demand_curr_edge) # virtual matrix, much faster
+
+        # edges_of_path = a_star(s_dir, s_src, s_dst, current_weights)
+        edges_of_path = a_star(s_dir, s_src, s_dst, current_weights, u -> dists[u, s_dst])
+
+        if isempty(edges_of_path)
+            return Inf  
+        end
+
+        empty!(edge_routing[i_edge])
+        push!(edge_routing[i_edge], src(edges_of_path[1]))
+        cost_of_routing_current_edge = 0
+        for edge in edges_of_path
+            u, v = src(edge), dst(edge)
+            push!(edge_routing[i_edge], v)
+            cost_of_routing_current_edge += modified_se_cost[u, v] 
+            se_cap_copy[u, v] -= demand_curr_edge
+            se_cap_copy[v, u] -= demand_curr_edge # undir version
+        end
+
+        routing_cost += cost_of_routing_current_edge * demand_curr_edge
+    end
+
+    return routing_cost
+
+end
+
+
+
+# ==== PLACEMENT STUFF
+# can_host[s, v] == true  ⇔  substrate node s may host virtual node v
+function compute_can_host(instance, v_subgraph, branching; s_zone = vertices(instance.s_network.graph))
+    vn_dem = instance.v_network.node_demands
+    sn_cap = instance.s_network.node_capacities
+    n_sn = nv(instance.s_network.graph)
+
+    in_zone = falses(n_sn)
+    in_zone[s_zone] .= true
+
+    can_host = falses(n_sn, nv(instance.v_network.graph))
+    for v in v_subgraph.nodes
+        if haskey(branching.placement_mandatory, v)
+            can_host[branching.placement_mandatory[v], v] = true
+        elseif haskey(branching.placement_allowed, v)
+            for s in branching.placement_allowed[v]
+                can_host[s, v] = in_zone[s] && sn_cap[s] >= vn_dem[v]
+            end
+        else
+            can_host[:, v] .= in_zone .& (sn_cap .>= vn_dem[v])
+        end
+    end
+    return can_host
+end
+
+
+function initialize_placement!(placement, v_subgraph, branching, can_host)
+    placement .= 0
+
+    has_mandatory = false
+    for v in v_subgraph.nodes
+        if haskey(branching.placement_mandatory, v)
+            placement[v] = branching.placement_mandatory[v]
+            has_mandatory = true
+        end
+    end
+    has_mandatory && return true
+
+    # start from the most constrained virtual node, random tie-break
+    nb_hosts(v) = count(@view can_host[:, v])
+    fewest = minimum(nb_hosts, v_subgraph.nodes)
+    fewest == 0 && return false # if no node can host anything
+
+    start = rand([v for v in v_subgraph.nodes if nb_hosts(v) == fewest])
+    placement[start] = rand(findall(@view can_host[:, start]))
+    return true
+end
+
+
+function complete_partial_placement!(
+        partial_placement::Vector{Int}, 
+        instance::Instance, 
+        dists::Matrix, 
+        v_subgraph::Subgraph, 
+        duals::DualValues,
+        branching::Branching
+    )
 
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
@@ -123,16 +255,33 @@ function complete_partial_placement!(partial_placement::Vector{Int}, instance::I
 
     return placement_cost
 end
-        
 
 
 
 
-function solve_greedy_pricer_branching(instance::Instance, v_subgraph::Subgraph, duals::DualValues, current_dists::Matrix, modified_se_cost::Matrix, branching::Branching; nb_greedy = 100, time_max = 10)
+
+
+
+
+
+function solve_greedy_pricer(
+        instance::Instance, 
+        v_subgraph::Subgraph, 
+        s_zone::Vector{Int},
+        duals::DualValues, 
+        current_dists::Matrix, 
+        modified_se_cost::Matrix, 
+        branching::Branching; 
+        nb_greedy = 100, 
+        time_max = 10
+    )
+    
+    v_g, vn_dem = instance.v_network.graph, instance.v_network.node_demands
+    s_g, sn_cap = instance.s_network.graph, instance.s_network.node_capacities
+
     time_beginning = time()
 
-    v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
-    s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
+
 
     # Memory allocation
     placement = Vector{Int}(undef, nv(v_g))
@@ -149,7 +298,9 @@ function solve_greedy_pricer_branching(instance::Instance, v_subgraph::Subgraph,
         sizehint!(best_routing[i], nv(s_g))
     end
 
+    can_host = compute_can_host(instance, v_subgraph; branching, s_zone)
     
+
     # Loop tools
     best_cost       = Inf
     iter            = 1
@@ -158,46 +309,12 @@ function solve_greedy_pricer_branching(instance::Instance, v_subgraph::Subgraph,
     while iter <= nb_greedy && time_overall < time_max
         
         placement .= 0
-        still_init = true
-
-        for (v_node, s_node) in branching.placement_mandatory
-            if v_node ∈ v_subgraph.nodes
-                placement[v_node] = s_node
-                still_init = false
-            end
-        end
-        if still_init
-            v_node_zoning = Int[]
-            for v_node in keys(branching.placement_allowed)
-                if v_node ∈ v_subgraph.nodes
-                    push!(v_node_zoning, v_node)
-                end
-            end
-            if !isempty(v_node_zoning)
-                start_node = rand(v_node_zoning)
-                possible_start_s_node = Vector{Int}()
-                for s_node in branching.placement_allowed[start_node]
-                    if sn_cap[s_node] >= vn_dem[start_node]
-                        push!(possible_start_s_node, s_node)
-                    end
-                end
-                s_node_start = rand(possible_start_s_node)
-                placement[start_node] = s_node_start
-            else
-                start_node = rand(v_subgraph.nodes)
-                possible_start_s_node = Vector{Int}()
-                for s_node in vertices(s_g)
-                    if sn_cap[s_node] >= vn_dem[start_node]
-                        push!(possible_start_s_node, s_node)
-                    end
-                end
-                s_node_start = rand(possible_start_s_node)
-                placement[start_node] = s_node_start 
-            end
-        end
         for i_edge in 1:length(v_subgraph.edges)
             empty!(routing[i_edge])
         end
+
+
+        initialize_placement!(placement, v_subgraph, branching, can_host)
 
         placement_cost = complete_partial_placement!(placement, instance, current_dists, v_subgraph, duals, branching) 
 
@@ -234,4 +351,3 @@ function solve_greedy_pricer_branching(instance::Instance, v_subgraph::Subgraph,
     #println("Found $reduced_cost with $iter iterations and $(time()-time_beginning) time")
     return Mapping(best_placement, best_routing), reduced_cost
 end
-

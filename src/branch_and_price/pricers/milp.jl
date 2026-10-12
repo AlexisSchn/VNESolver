@@ -9,6 +9,8 @@ function set_up_pricer(instance::Instance, v_subgraph::Subgraph)
 
     model = Model(CPLEX.Optimizer)
 
+    set_attribute(model, "CPXPARAM_Threads", 1)
+
     
     ### Variables
     @variable(model, x[v_subgraph.nodes, vertices(s_g)], binary=true);
