@@ -104,8 +104,6 @@ function branch_or_prune(
 
         result_branching = get_branching(bnp_state)
 
-        println(result_branching)
-
         if result_branching.status == :NodeBranching
 
             v_node, s_node = result_branching.branching_rule

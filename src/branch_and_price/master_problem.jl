@@ -155,39 +155,6 @@ end
 
 
 
-struct DualValues
-    submapping_selection::JuMP.Containers.DenseAxisArray
-    overlapping::JuMP.Containers.SparseAxisArray
-    node_1t1::AbstractArray{Float64}
-    edge_capacity::JuMP.Containers.DenseAxisArray
-    flow_conservation::JuMP.Containers.DenseAxisArray
-    flow_departure::JuMP.Containers.DenseAxisArray
-end
-
-
-function DualValues(model::Model)
-    return DualValues(
-        dual.(model[:submapping_selection]),
-        dual.(model[:overlapping]),
-        dual.(model[:node_1t1]),
-        dual.(model[:edge_capacity]),
-        dual.(model[:flow_conservation]),
-        dual.(model[:flow_departure])
-    )
-end
-
-# doesnt work
-function zero_duals(model::Model)
-    return DualValues(
-        JuMP.Containers.DenseAxisArray(zeros(size(model[:submapping_selection])), axes(model[:submapping_selection])...),
-        JuMP.Containers.DenseAxisArray(zeros(size(model[:overlapping])), axes(model[:overlapping])...),
-        zeros(size(model[:node_1t1])),
-        JuMP.Containers.DenseAxisArray(zeros(size(model[:edge_capacity])), axes(model[:edge_capacity])...),
-        JuMP.Containers.DenseAxisArray(zeros(size(model[:flow_conservation])), axes(model[:flow_conservation])...),
-        JuMP.Containers.DenseAxisArray(zeros(size(model[:flow_departure])), axes(model[:flow_departure])...)
-    )
-end
-
 
 function stabilize_duals!(dual_costs::DualValues, current_dual_costs::DualValues, stabilization_coeff::Float64)
 

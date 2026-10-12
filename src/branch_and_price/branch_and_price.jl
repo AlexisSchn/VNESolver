@@ -14,7 +14,7 @@ function solve_branch_price(instance::Instance)
     # Compute the partition
     #v_partition = [[1, 2, 3, 11], [5, 6, 9, 11], [4, 7, 12], [8], [10]] # toy instance [[1, 2, 3, 11], [5, 6, 9], [4, 7, 12], [8], [10]] 
     #v_partition = [[15, 16, 17, 18, 19, 24, 26], [1, 2, 20, 21, 22, 27], [9, 10, 11, 12, 13, 15], [4, 5, 6, 14], [3], [7], [8], [23], [25]]
-    #v_partition = [[i_node] for i_node in 1:nv(v_g)]
+    v_partition = [[i_node] for i_node in 1:nv(v_g)]
     v_partition = [[1, 7, 8, 9, 10, 12, 15], [2, 3, 4, 5, 6], [11, 13, 14]]
 
     println("Partition: $v_partition")
@@ -29,6 +29,8 @@ function solve_branch_price(instance::Instance)
     # RMP
     model_master    = Model(CPLEX.Optimizer)
     set_attribute(model_master, "CPXPARAM_LPMethod", 2)
+    set_attribute(model_master, "CPXPARAM_Threads", 1)
+
     set_silent(model_master)
     print(v_decomposition.nb_appearance_nodes)
     columns         = set_up_master_problem!(model_master, instance, v_decomposition)

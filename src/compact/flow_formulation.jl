@@ -24,7 +24,11 @@ function solve_flow_formulation(
     set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_LiftProj", -1)
 
     # Primary parameter to disable presolve; 0 for off, 1 for on
-    set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Presolve", 0)
+    set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Presolve", 1)
+
+    set_attribute(model, "CPXPARAM_Threads", 1)
+
+    
 
     # Optional: Disable aggregator and primal/dual reductions for a 100% raw model
     #set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Aggregator", 1)
