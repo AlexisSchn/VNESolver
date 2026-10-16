@@ -16,12 +16,14 @@ include("branching/branching.jl")
 include("branch_and_price.jl")
 include("master_problem.jl")
 include("column_generation/root_node.jl")
+include("column_generation/root_node2.jl")
 include("column_generation/tree_node.jl")
 include("column_generation/potential_solution.jl")
 include("pricers/milp.jl")
 include("pricers/greedy.jl")
 include("pricers/greedy_substrate_subgraph.jl")
 include("pricers/greedy_branching.jl")
+include("pricers/new_greedy_claude.jl")
 
 
 

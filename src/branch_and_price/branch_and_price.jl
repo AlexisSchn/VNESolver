@@ -47,7 +47,7 @@ function solve_branch_price(instance::Instance)
 
 
     # 2 ) Solve root node relaxation
-    lg_bound, dual_costs = solve_column_generation_root_node!(model_master, columns, instance, v_decomposition, pricers)
+    lg_bound, dual_costs = solve_column_generation_root_node2!(model_master, columns, instance, v_decomposition, pricers)
     # Should also get the relaxation itself here! To help with branching. Or I can do it myself here...
 
 
