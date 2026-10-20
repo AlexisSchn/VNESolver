@@ -24,8 +24,8 @@ function solve_column_generation_root_node2!(
 
     time_max            = 1000
     nb_iter_max         = 1000
-    gap_min             = 0.01
-    stabilization_coeff = 0.0
+    gap_min             = 0.005
+    stabilization_coeff = 0.
     keep_on             = true
 
     time_overall        = time() - time_beginning
@@ -60,10 +60,6 @@ function solve_column_generation_root_node2!(
     nb_nodes_min = size_max_v_subgraph * 3
     complete_clusters!(clusters, s_g, nb_nodes_min)
 
-    #print("For greedy subpricers, substrate decomposition:")
-    #print_stuff_subgraphs(s_subgraphs)
-
-    #initialization_greedy!(model_master, columns, instance, v_decomposition, s_subgraphs)
 
 
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
@@ -89,8 +85,10 @@ function solve_column_generation_root_node2!(
             modified_se_cost[u, v] = se_cost[u, v] - current_dual_costs.edge_capacity[Edge(u, v)]
             modified_se_cost[v, u] = se_cost[v, u] - current_dual_costs.edge_capacity[Edge(u, v)]
         end
+
         dists = [floyd_warshall_shortest_paths(s_dir, DynamicWeightMatrix(modified_se_cost, se_cap, d)).dists
                 for d in 1:max_dem]
+
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
                 continue
@@ -100,7 +98,6 @@ function solve_column_generation_root_node2!(
 
                 t=time()
                 
-                println("BRUH S ZONE/ $s_zone")
                 submapping, reduced_cost = solve_greedy_pricer_claude(
                     instance, 
                     v_subgraph, 
@@ -109,7 +106,7 @@ function solve_column_generation_root_node2!(
                     dists, 
                     modified_se_cost,
                     empty_branching,
-                    nb_greedy = 50, 
+                    nb_greedy = 250, 
                     time_max = 10
                 )
                     
@@ -184,7 +181,7 @@ function solve_column_generation_root_node2!(
                     dists, 
                     modified_se_cost,
                     empty_branching,
-                    nb_greedy = 50, 
+                    nb_greedy = 250, 
                     time_max = 10
                 )
                 
@@ -243,7 +240,7 @@ function solve_column_generation_root_node2!(
 
             t=time()                
                 
-            submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, branching)
+            submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, empty_branching)
             time_pricer += time()-t
 
             if reduced_cost < -0.0001 && !isnothing(submapping)
@@ -277,106 +274,6 @@ function solve_column_generation_root_node2!(
 
 end
 
-
-
-
-
-
-function complete_clusters!(clusters, s_g, nb_nodes_min)
-
-    for cluster in clusters
-        if length(cluster) > 0
-            while length(cluster) < nb_nodes_min
-                s_neighbors = Int[]
-                for s_node in cluster
-                    for s_neigh in neighbors(s_g, s_node)
-                        if s_neigh ∉ cluster
-                            push!(s_neighbors, s_neigh)
-                        end
-                    end
-                end
-                push!(cluster, rand(s_neighbors))
-            end
-        end
-    end
-
-end
-
-
-
-function initialization_greedy!(model_master::Model, columns, instance::Instance, v_decomposition::OverlappingVirtualDecomposition, s_subgraphs)
-    
-    
-    empty_duals = zero_duals(model_master)
-    shortest_paths = floyd_warshall_shortest_paths(instance.s_network.directed_graph, instance.s_network.edge_costs)
-
-    for v_subgraph in v_decomposition.subgraphs
-        if length(v_subgraph.nodes) <= 2
-            continue
-        end
-
-        for s_subgraph in s_subgraphs
-
-            t=time()
-        
-            submapping, reduced_cost = solve_greedy_sub_pricer(instance, v_subgraph, s_subgraph, empty_duals, shortest_paths.dists, instance.s_network.edge_costs, nb_greedy = 50, time_max = 10)
-
-            if isnothing(submapping)
-                continue
-            end
-            #println("Found a nice mapping $reduced_cost")
-            #=
-            if column_already_there(columns, submapping, v_subgraph)
-                println("already there!")
-                continue
-            end
-            =#
-            add_column!(model_master, columns, v_subgraph, submapping, instance)
-        end
-    end
-end
-
-
-
-function add_edge_columns!(model_master, columns, instance::Instance, v_decomposition::OverlappingVirtualDecomposition)
-
-    v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
-    s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
-
-    nb_cols_added=0
-
-    for v_subgraph in v_decomposition.subgraphs
-        if length(v_subgraph.nodes) == 2
-            v_edge = v_subgraph.edges[1]
-            for s_edge in edges(s_g)
-                if se_cap[src(s_edge), dst(s_edge)] >= ve_dem[src(v_edge), dst(v_edge)]
-                    if sn_cap[src(s_edge)] >= vn_dem[src(v_edge)] && sn_cap[dst(s_edge)] >= vn_dem[dst(v_edge)]
-                        placement = zeros(Int, nv(v_g))
-                        placement[src(v_edge)] = src(s_edge)
-                        placement[dst(v_edge)] = dst(s_edge)
-                        routing = Vector{Vector{Int}}()
-                        push!(routing, [src(s_edge), dst(s_edge)])
-                        m = Mapping(placement, routing)
-                        add_column!(model_master, columns, v_subgraph, m, instance)
-                        nb_cols_added+=1
-                    end
-                    if sn_cap[dst(s_edge)] >= vn_dem[src(v_edge)] && sn_cap[src(s_edge)] >= vn_dem[dst(v_edge)]
-                        placement = zeros(Int, nv(v_g))
-                        placement[src(v_edge)] = dst(s_edge)
-                        placement[dst(v_edge)] = src(s_edge)
-                        routing = Vector{Vector{Int}}()
-                        push!(routing, [dst(s_edge), src(s_edge)])
-                        m = Mapping(placement, routing)
-                        add_column!(model_master, columns, v_subgraph, m, instance)
-                        nb_cols_added+=1
-                    end
-                end
-            end
-        end
-    end
-
-    println("$nb_cols_added columns added during init")
-end
 
 
 

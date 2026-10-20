@@ -75,7 +75,7 @@ function solve_branch_price(instance::Instance)
 
         current_node = dequeue!(tree_queue)
        
-        lg_bound = solve_column_generation_node!(bnp_state, current_node)
+        lg_bound = solve_column_generation_node2!(bnp_state, current_node)
 
         # prune: collect first, then delete
         to_delete = [node for (node, bound) in tree_queue if threshold_ceil(bound) >= bnp_state.best_solution - 0.01]

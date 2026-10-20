@@ -36,7 +36,7 @@ function shortest_path_routing!(edge_routing, instance::Instance, v_node_placeme
         current_weights = DynamicWeightMatrix(modified_se_cost, se_cap_copy, demand_curr_edge) # virtual matrix, much faster
 
         # edges_of_path = a_star(s_dir, s_src, s_dst, current_weights)
-        edges_of_path = a_star(s_dir, s_src, s_dst, current_weights, u -> dists[d][u, s_dst])
+        edges_of_path = a_star(s_dir, s_src, s_dst, current_weights, u -> dists[demand_curr_edge][u, s_dst])
 
         if isempty(edges_of_path)
             return Inf  
@@ -173,7 +173,6 @@ function complete_partial_placement!(
         rcl_size::Int = 1,
     )
     v_g, ve_dem = instance.v_network.graph, instance.v_network.edge_demands
-    in_sub = v_subgraph.in_subgraph
     n_vn, n_sn = nv(v_g), size(node_rc, 1)
 
     is_placed      = falses(n_vn)
@@ -185,7 +184,7 @@ function complete_partial_placement!(
 
     function add_to_frontier!(v)
         for u in neighbors(v_g, v)
-            (in_sub[u] && !is_placed[u]) || continue
+            (in_subgraph(v_subgraph, u) && !is_placed[u]) || continue
             nb_placed_nbrs[u] += 1
             if !in_frontier[u]
                 in_frontier[u] = true
@@ -219,7 +218,7 @@ function complete_partial_placement!(
         # ... + demand-weighted distance to each placed neighbour
         # (assumes symmetric costs: dists[d][s, p] == dists[d][p, s])
         for u in neighbors(v_g, v)
-            if in_sub[u] && is_placed[u]
+            if in_subgraph(v_subgraph, u) && is_placed[u]
                 d = edge_demand(ve_dem, v, u)
                 @views scores .+= d .* dists[d][:, placement[u]]
             end

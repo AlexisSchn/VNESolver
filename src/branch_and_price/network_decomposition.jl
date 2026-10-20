@@ -8,7 +8,7 @@ function set_up_virtual_decomposition(graph::Graph, partition::Vector{Vector{Int
     # Setting the decomposition
     v_subgraphs = Subgraph[]
     cut_edges = Edge[]
-    nb_appearance = zeros(Int, nv(graph))
+    nb_appearance = zeros(Int, nv(graph)) # kind of dangerous that its shared, no?? TODO maybe change this...
 
     for v_edge in edges(graph)
         is_cut_edge = true
@@ -22,31 +22,44 @@ function set_up_virtual_decomposition(graph::Graph, partition::Vector{Vector{Int
         end
     end
 
+
+    cut_edge_set = Set(cut_edges)
+
     for v_nodes in partition
+
         sort!(v_nodes)
         idx_of_nodes = zeros(Int, nv(graph))
-        for (i_node, v_node) in enumerate(v_nodes) 
-            idx_of_nodes[v_node] = i_node
-            nb_appearance[v_node] += 1
+        for (i, v) in enumerate(v_nodes)
+            idx_of_nodes[v] = i
+            nb_appearance[v] += 1
         end
-
 
         subgraph_edges = Edge[]
         cut_edges_src = [Edge[] for _ in vertices(graph)]
         cut_edges_dst = [Edge[] for _ in vertices(graph)]
 
-        for v_edge in edges(graph)
-            if src(v_edge) ∈ v_nodes && dst(v_edge) ∈ v_nodes
-                push!(subgraph_edges, v_edge)
-            end
-            if src(v_edge) ∈ v_nodes && v_edge ∈ cut_edges
-                push!(cut_edges_src[src(v_edge)], v_edge)  
-            end
-            if dst(v_edge) ∈ v_nodes && v_edge ∈ cut_edges
-                push!(cut_edges_dst[dst(v_edge)], v_edge)  
+        for e in edges(graph)
+            src_in = idx_of_nodes[src(e)] != 0
+            dst_in = idx_of_nodes[dst(e)] != 0
+            src_in && dst_in && push!(subgraph_edges, e)
+            if e ∈ cut_edge_set
+                src_in && push!(cut_edges_src[src(e)], e)
+                dst_in && push!(cut_edges_dst[dst(e)], e)
             end
         end
-        push!(v_subgraphs, Subgraph(v_nodes, subgraph_edges, cut_edges_src, cut_edges_dst, idx_of_nodes, [], zeros(Int, nv(graph)), nb_appearance))
+        
+        
+        push!(v_subgraphs, Subgraph(
+            v_nodes,
+            subgraph_edges,
+            cut_edges_src,
+            cut_edges_dst,
+            idx_of_nodes,
+            Int[],                    # overlapping_nodes
+            zeros(Int, nv(graph)),    # idx_overlapping
+            nb_appearance,
+        ))
+
     end
     
     

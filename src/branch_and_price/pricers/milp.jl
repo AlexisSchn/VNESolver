@@ -9,8 +9,8 @@ function set_up_pricer(instance::Instance, v_subgraph::Subgraph)
 
     model = Model(CPLEX.Optimizer)
 
-    set_attribute(model, "CPXPARAM_Threads", 1)
-
+    #set_attribute(model, "CPXPARAM_Threads", 1)
+    set_attribute(model, "CPXPARAM_MIP_Tolerances_UpperCutoff", -1e-6)
     
     ### Variables
     @variable(model, x[v_subgraph.nodes, vertices(s_g)], binary=true);
@@ -75,6 +75,7 @@ end
 
 function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualValues, instance::Instance, branching::Branching)
 
+
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
 
@@ -82,8 +83,8 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
     placement_cost = @expression(model, 
         sum( ( sn_cost[s_node] * vn_dem[v_node] - duals.node_1t1[s_node] ) * model[:x][v_node, s_node] / v_subgraph.nb_appearance_nodes[v_node]
             for v_node in v_subgraph.nodes for s_node in vertices(s_g) ))
-  
-               
+
+            
     routing_cost = @expression(model, sum( 
         ( se_cost[src(s_edge), dst(s_edge)] - duals.edge_capacity[s_edge] ) * ve_dem[src(v_edge), dst(v_edge)]
         *  (model[:y][v_edge, s_edge] + model[:y][v_edge, Edge(dst(s_edge), src(s_edge))])
@@ -164,75 +165,84 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
 
 
 
+    try
+        # solving
+        set_silent(model)
+        optimize!(model)
+        
 
-    # solving
-    set_silent(model)
-    optimize!(model)
-    
 
+        status = primal_status(model)
 
-    status = primal_status(model)
-    if (status != MOI.FEASIBLE_POINT)
-        println("Infeasible subproblem... $status")
-        println("Its for subgraph $(v_subgraph.nodes)")
-        println("With variables $variables_to_unfix")
-        for var in variables_to_unfix
-            unfix(var)
-            set_lower_bound(var, 0.0)
-            set_upper_bound(var, 1.0) 
+        if termination_status(model) == MOI.INFEASIBLE
+            return nothing, 0.0      # no negative column, contributes 0 to the bound
         end
-        #println(model)
-        return nothing, Inf
-    end
 
-    reduced_cost = objective_value(model) 
-    if reduced_cost > -0.000001
-        for var in variables_to_unfix
-            unfix(var)
-            set_lower_bound(var, 0.0)
-            set_upper_bound(var, 1.0) 
-        end
-        return nothing, 0
-    end
-
-
-    # returning the solution
-    x_values = value.(model[:x])
-    y_values = value.(model[:y])
-
-    node_placement = zeros(Int, length(v_g))
-    for v_node in v_subgraph.nodes
-        for s_node in vertices(s_g)
-            if x_values[v_node, s_node] > 0.1
-                node_placement[v_node] = s_node
+        #= TODO we will need to be careful when I'm using subpricers
+        if (status != MOI.FEASIBLE_POINT)
+            println("Infeasible subproblem... $status")
+            println("Its for subgraph $(v_subgraph.nodes)")
+            println("With variables $variables_to_unfix")
+            for var in variables_to_unfix
+                unfix(var)
+                set_lower_bound(var, 0.0)
+                set_upper_bound(var, 1.0) 
             end
+            #println(model)
+            return nothing, Inf
         end
-    end
+        =#
 
-    edge_routing = Vector{Vector{Int}}()
-    for v_edge in v_subgraph.edges
-        u_start, u_terminus = node_placement[src(v_edge)], node_placement[dst(v_edge)]
-        path = [u_start]
-        curr_node = u_start
-        while curr_node != u_terminus
-            for dst in outneighbors(s_dir, curr_node)
-                if y_values[v_edge, Edge(curr_node, dst)] ≥ 0.5 
-                    push!(path, dst)
-                    curr_node = dst                
-                    break
+        reduced_cost = objective_value(model) 
+
+
+
+
+        if reduced_cost > -0.000001
+            return nothing, 0
+        end
+
+
+        # returning the solution
+        x_values = value.(model[:x])
+        y_values = value.(model[:y])
+
+        node_placement = zeros(Int, length(v_g))
+        for v_node in v_subgraph.nodes
+            for s_node in vertices(s_g)
+                if x_values[v_node, s_node] > 0.1
+                    node_placement[v_node] = s_node
                 end
             end
         end
-        push!(edge_routing, path)
-    end
 
-    
-    for var in variables_to_unfix
-        unfix(var)
-        set_lower_bound(var, 0.0)
-        set_upper_bound(var, 1.0) 
-    end
-    
-    return Mapping(node_placement, edge_routing), reduced_cost
+        edge_routing = Vector{Vector{Int}}()
+        for v_edge in v_subgraph.edges
+            u_start, u_terminus = node_placement[src(v_edge)], node_placement[dst(v_edge)]
+            path = [u_start]
+            curr_node = u_start
+            while curr_node != u_terminus
+                for dst in outneighbors(s_dir, curr_node)
+                    if y_values[v_edge, Edge(curr_node, dst)] ≥ 0.5 
+                        push!(path, dst)
+                        curr_node = dst                
+                        break
+                    end
+                end
+            end
+            push!(edge_routing, path)
+        end
 
+        return Mapping(node_placement, edge_routing), reduced_cost
+
+    finally
+        
+        for var in variables_to_unfix
+            unfix(var)
+            set_lower_bound(var, 0.0)
+            set_upper_bound(var, 1.0) 
+        end
+        
+        
+    end
 end

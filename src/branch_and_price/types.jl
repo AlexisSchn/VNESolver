@@ -48,6 +48,8 @@ struct Subgraph
     nb_appearance_nodes::Vector{Int}
 end
 
+in_subgraph(sg::Subgraph, v) = sg.idx_of_nodes[v] != 0
+
 struct OverlappingVirtualDecomposition
     subgraphs::Vector{Subgraph}
     cut_edges::Vector{Edge}
