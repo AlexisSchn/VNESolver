@@ -12,7 +12,7 @@ export visu_graph, visu_partitioning
 include("core/types.jl")
 include("core/tools.jl")
 include("core/io.jl")
-#include("core/visualization.jl")
+include("core/visualization.jl")
 
 abstract type AbstractSolverResult end
 abstract type AbstractSolverParameters end

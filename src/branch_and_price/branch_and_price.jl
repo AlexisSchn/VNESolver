@@ -16,6 +16,7 @@ function solve_branch_price(instance::Instance)
     #v_partition = [[15, 16, 17, 18, 19, 24, 26], [1, 2, 20, 21, 22, 27], [9, 10, 11, 12, 13, 15], [4, 5, 6, 14], [3], [7], [8], [23], [25]]
     v_partition = [[i_node] for i_node in 1:nv(v_g)]
     v_partition = [[1, 7, 8, 9, 10, 12, 15], [2, 3, 4, 5, 6], [11, 13, 14]]
+    #v_partition = [[1], [2],[ 3, 4, 5, 6, 7, 8, 9, 25], [9, 10, 11, 12, 15, 16, 17], [13, 14, 15, 18, 19, 20, 21, 22, 23, 24]]
 
     println("Partition: $v_partition")
     v_decomposition = set_up_virtual_decomposition(instance.v_network.graph, v_partition)
@@ -47,7 +48,7 @@ function solve_branch_price(instance::Instance)
 
 
     # 2 ) Solve root node relaxation
-    lg_bound, dual_costs = solve_column_generation_root_node2!(model_master, columns, instance, v_decomposition, pricers)
+    lg_bound, dual_costs = solve_column_generation_root_node!(model_master, columns, instance, v_decomposition, pricers)
     # Should also get the relaxation itself here! To help with branching. Or I can do it myself here...
 
 
@@ -75,7 +76,7 @@ function solve_branch_price(instance::Instance)
 
         current_node = dequeue!(tree_queue)
        
-        lg_bound = solve_column_generation_node2!(bnp_state, current_node)
+        lg_bound = solve_column_generation_node!(bnp_state, current_node)
 
         # prune: collect first, then delete
         to_delete = [node for (node, bound) in tree_queue if threshold_ceil(bound) >= bnp_state.best_solution - 0.01]

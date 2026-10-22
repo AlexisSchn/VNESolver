@@ -11,6 +11,9 @@ function solve_column_generation_root_node!(
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
 
+    empty_branching = Branching()
+    max_dem = maximum(ve_dem)
+
 
     optimize!(model_master)
 
@@ -21,7 +24,7 @@ function solve_column_generation_root_node!(
 
     time_max            = 1000
     nb_iter_max         = 1000
-    gap_min             = 0.01
+    gap_min             = 0.005
     stabilization_coeff = 0.0
     keep_on             = true
 
@@ -57,11 +60,6 @@ function solve_column_generation_root_node!(
     nb_nodes_min = size_max_v_subgraph * 3
     complete_clusters!(clusters, s_g, nb_nodes_min)
 
-    s_subgraphs = set_up_substrate_subgraphs(s_g, clusters)
-    #print("For greedy subpricers, substrate decomposition:")
-    #print_stuff_subgraphs(s_subgraphs)
-
-    #initialization_greedy!(model_master, columns, instance, v_decomposition, s_subgraphs)
 
 
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
@@ -87,20 +85,31 @@ function solve_column_generation_root_node!(
             modified_se_cost[u, v] = se_cost[u, v] - current_dual_costs.edge_capacity[Edge(u, v)]
             modified_se_cost[v, u] = se_cost[v, u] - current_dual_costs.edge_capacity[Edge(u, v)]
         end
-        shortest_paths = floyd_warshall_shortest_paths(s_dir, modified_se_cost)
+
+        dists = [floyd_warshall_shortest_paths(s_dir, DynamicWeightMatrix(modified_se_cost, se_cap, d)).dists
+                for d in 1:max_dem]
 
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
                 continue
             end
 
-            for s_subgraph in s_subgraphs
+            for s_zone in clusters
 
                 t=time()
-            
-                submapping, reduced_cost = solve_greedy_sub_pricer(instance, v_subgraph, s_subgraph, current_dual_costs, shortest_paths.dists, modified_se_cost, nb_greedy = 50, time_max = 10)
+                
+                submapping, reduced_cost = solve_greedy_pricer_claude(
+                    instance, 
+                    v_subgraph, 
+                    s_zone, 
+                    current_dual_costs, 
+                    dists, 
+                    modified_se_cost,
+                    empty_branching,
+                    nb_greedy = 250, 
+                    time_max = 10
+                )
                     
-            
                 time_pricer += time()-t
 
                 if reduced_cost < -0.0001 && !isnothing(submapping)
@@ -120,7 +129,7 @@ function solve_column_generation_root_node!(
         @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
             iter, rmp_value, lg_bound, "greedy subpricers", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
 
-        if nb_total_columns > 750 || iter > 35 
+        if nb_total_columns > 1000 || iter > 100 
             keep_on=false
         end
 
@@ -153,6 +162,10 @@ function solve_column_generation_root_node!(
         end
         shortest_paths = floyd_warshall_shortest_paths(s_dir, modified_se_cost)
 
+        dists = [floyd_warshall_shortest_paths(s_dir, DynamicWeightMatrix(modified_se_cost, se_cap, d)).dists
+                for d in 1:max_dem]
+
+
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
                 continue
@@ -160,7 +173,17 @@ function solve_column_generation_root_node!(
 
             t=time()
         
-            submapping, reduced_cost = solve_greedy_pricer(instance, v_subgraph, current_dual_costs, shortest_paths.dists, modified_se_cost, nb_greedy = 50, time_max = 10)
+            submapping, reduced_cost = solve_greedy_pricer_claude(
+                    instance, 
+                    v_subgraph, 
+                    collect(1:nv(s_g)), 
+                    current_dual_costs, 
+                    dists, 
+                    modified_se_cost,
+                    empty_branching,
+                    nb_greedy = 250, 
+                    time_max = 10
+                )
                 
         
             time_pricer += time()-t
@@ -188,10 +211,15 @@ function solve_column_generation_root_node!(
 
     end
 
-    keep_on     = true
-    branching   = Branching()
+
+
+    # --- MILP
+
+    keep_on=true
     optimize!(model_master)
-    dual_costs  = DualValues(model_master)
+    dual_costs = DualValues(model_master)
+    rmp_value = objective_value(model_master)
+
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
 
         iter += 1        
@@ -206,8 +234,8 @@ function solve_column_generation_root_node!(
 
         current_dual_costs = DualValues(model_master)
         stabilize_duals!(dual_costs, current_dual_costs, stabilization_coeff)
-
-        rmp_value = objective_value(model_master)
+        current_rmp_value = objective_value(model_master)
+        rmp_value = stabilization_coeff * rmp_value + (1-stabilization_coeff) * current_rmp_value
 
 
         for v_subgraph in v_decomposition.subgraphs
@@ -217,7 +245,7 @@ function solve_column_generation_root_node!(
 
             t=time()                
                 
-            submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, branching)
+            submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, empty_branching)
             time_pricer += time()-t
 
             if reduced_cost < -0.0001 && !isnothing(submapping)
@@ -235,13 +263,18 @@ function solve_column_generation_root_node!(
             lg_bound = new_lg_bound
         end
 
-        gap = (rmp_value-lg_bound)/rmp_value
+
+        gap = (current_rmp_value-lg_bound)/rmp_value
         average_reduced_cost = total_reduced / nb_pricer
 
         time_overall = time() - time_beginning
         @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
             iter, rmp_value, lg_bound, "milp", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
 
+        if gap<0.15 && stabilization_coeff<0.01
+            println("activating stabilization")
+            stabilization_coeff = 0.9
+        end
 
     end 
 
@@ -250,6 +283,8 @@ function solve_column_generation_root_node!(
     return lg_bound, dual_costs
 
 end
+
+
 
 
 
@@ -276,39 +311,6 @@ function complete_clusters!(clusters, s_g, nb_nodes_min)
 
 end
 
-
-
-function initialization_greedy!(model_master::Model, columns, instance::Instance, v_decomposition::OverlappingVirtualDecomposition, s_subgraphs)
-    
-    
-    empty_duals = zero_duals(model_master)
-    shortest_paths = floyd_warshall_shortest_paths(instance.s_network.directed_graph, instance.s_network.edge_costs)
-
-    for v_subgraph in v_decomposition.subgraphs
-        if length(v_subgraph.nodes) <= 2
-            continue
-        end
-
-        for s_subgraph in s_subgraphs
-
-            t=time()
-        
-            submapping, reduced_cost = solve_greedy_sub_pricer(instance, v_subgraph, s_subgraph, empty_duals, shortest_paths.dists, instance.s_network.edge_costs, nb_greedy = 50, time_max = 10)
-
-            if isnothing(submapping)
-                continue
-            end
-            #println("Found a nice mapping $reduced_cost")
-            #=
-            if column_already_there(columns, submapping, v_subgraph)
-                println("already there!")
-                continue
-            end
-            =#
-            add_column!(model_master, columns, v_subgraph, submapping, instance)
-        end
-    end
-end
 
 
 
@@ -351,6 +353,5 @@ function add_edge_columns!(model_master, columns, instance::Instance, v_decompos
 
     println("$nb_cols_added columns added during init")
 end
-
 
 

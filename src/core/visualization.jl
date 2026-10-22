@@ -1,5 +1,5 @@
+using Plots, GraphRecipes
 
-#=
 function visu_graph(g::Graph)
     w = []
     for i_node in 1:nv(g)
@@ -42,4 +42,4 @@ function visu_partitioning(g::Graph, partitionning)
     display(p) 
 
 end
-=#
+

@@ -9,7 +9,8 @@ function set_up_master_problem!(model_master::Model, instance::Instance, v_decom
     
         
     # ----- Variables
-    @variable(model_master, 0. <= y[v_decomposition.cut_edges, edges(s_dir)] <= 1.);
+    @variable(model_master, 0. <= y[v_decomposition.cut_edges, edges(s_dir)]);
+    #@variable(model_master, 0. <= y[v_decomposition.cut_edges, edges(s_dir)] <= 1.);
 
     
     # ----- Variables
@@ -73,7 +74,8 @@ function add_column!(model_master::Model, columns, v_subgraph::Subgraph, submapp
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
     
-    new_var = @variable(model_master, lower_bound = 0., upper_bound = 1.0)
+    new_var = @variable(model_master, lower_bound = 0.)
+    #new_var = @variable(model_master, lower_bound = 0., upper_bound = 1.0)
     push!(columns[v_subgraph], Column(new_var, submapping))
 
     cost = 0

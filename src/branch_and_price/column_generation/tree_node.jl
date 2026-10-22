@@ -12,6 +12,8 @@ function solve_column_generation_node!(
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
     
+    max_dem = maximum(ve_dem)
+
 
     # ============ PRE TREATMENT : fixing variables depending on the branching decisions
 
@@ -85,7 +87,7 @@ function solve_column_generation_node!(
 
     # greedy pricers
     keep_on=true
-    while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
+    while keep_on && time_overall < time_max && iter < nb_iter_max
         
         iter += 1        
         keep_on         = false
@@ -99,6 +101,8 @@ function solve_column_generation_node!(
 
         current_dual_costs = DualValues(model_master)
 
+
+
         rmp_value = objective_value(model_master)
 
         modified_se_cost = zeros(Float64, nv(s_g), nv(s_g))
@@ -108,7 +112,9 @@ function solve_column_generation_node!(
             modified_se_cost[u, v] = se_cost[u, v] - current_dual_costs.edge_capacity[Edge(u, v)]
             modified_se_cost[v, u] = se_cost[v, u] - current_dual_costs.edge_capacity[Edge(u, v)]
         end
-        shortest_paths = floyd_warshall_shortest_paths(s_dir, modified_se_cost)
+        dists = [floyd_warshall_shortest_paths(s_dir, DynamicWeightMatrix(modified_se_cost, se_cap, d)).dists
+                for d in 1:max_dem]
+
 
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
@@ -116,9 +122,18 @@ function solve_column_generation_node!(
             end
 
             t=time()
-        
-            submapping, reduced_cost = solve_greedy_pricer_branching(instance, v_subgraph, current_dual_costs, shortest_paths.dists, modified_se_cost, tree_node.branching, nb_greedy = 50, time_max = 10)
-                
+                        
+            submapping, reduced_cost = solve_greedy_pricer_claude(
+                instance, 
+                v_subgraph, 
+                collect(1:nv(s_g)), 
+                current_dual_costs, 
+                dists, 
+                modified_se_cost,
+                tree_node.branching,
+                nb_greedy = 250, 
+                time_max = 10
+            )
         
             time_pricer += time()-t
 
@@ -132,12 +147,11 @@ function solve_column_generation_node!(
             total_reduced += reduced_cost
         end
 
-        gap = (rmp_value-lg_bound)/rmp_value
         average_reduced_cost = total_reduced / nb_pricer
 
         time_overall = time() - time_beginning
-        #@printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
-        #    iter, rmp_value, lg_bound, "greedy", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
+        # @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
+        #     iter, rmp_value, lg_bound, "greedy", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
 
         if average_reduced_cost > -0.5 && rmp_value < 10000 && nb_total_columns > 50
             keep_on=false
@@ -150,6 +164,8 @@ function solve_column_generation_node!(
     keep_on=true
     optimize!(model_master)
     dual_costs = DualValues(model_master)
+    rmp_value = objective_value(model_master)
+
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min && threshold_ceil(lg_bound) < best_solution - 0.01
 
         iter += 1        
@@ -161,9 +177,11 @@ function solve_column_generation_node!(
 
         optimize!(model_master)
         time_rmp += time()-t
+        
         current_dual_costs = DualValues(model_master)
         stabilize_duals!(dual_costs, current_dual_costs, stabilization_coeff)
-        rmp_value = objective_value(model_master)
+        current_rmp_value = objective_value(model_master)
+        rmp_value = stabilization_coeff * rmp_value + (1-stabilization_coeff) * current_rmp_value
 
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
@@ -199,12 +217,12 @@ function solve_column_generation_node!(
             lg_bound = new_lg_bound
         end
 
-        gap = (rmp_value-lg_bound)/rmp_value
+        gap = (current_rmp_value-lg_bound)/rmp_value
         average_reduced_cost = total_reduced / nb_pricer
 
         time_overall = time() - time_beginning
-        #@printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
-        #    iter, rmp_value, lg_bound, "milp", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
+        # @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
+        #     iter, rmp_value, lg_bound, "milp", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
 
     end 
 
@@ -249,6 +267,10 @@ function solve_column_generation_node!(
 end
 
 
+
+
+
+
 function check_if_all_columns_are_integer(columns)
 
     for v_subgraph in keys(columns)
@@ -277,8 +299,4 @@ function threshold_ceil(a::Float64; tol::Float64=0.01)
     frac = a - floor(a)
     return frac > tol ? ceil(a) : a
 end
-
-
-
-
 
