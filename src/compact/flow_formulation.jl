@@ -25,7 +25,7 @@ function solve_flow_formulation(
 
     # # Primary parameter to disable presolve; 0 for off, 1 for on
     # set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Presolve", 0)
-
+    # set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Aggregator", 0)
     # set_attribute(model, "CPXPARAM_Threads", 1)
 
     
@@ -107,25 +107,23 @@ function set_up_formulation!(model, instance)
 
     
     ### Pre treatement on capacities 
-    
+    # this enforces the capacity constraints on nodes!
+    i = 0
     for v_node in vertices(v_g), s_node in vertices(s_g)
         if vn_dem[v_node] > sn_cap[s_node]
             fix(x[v_node, s_node], 0; force=true)
+            i+=1
         end
     end
-
-
-    # tkt meme pas (4 => 38, 11 => 61, 2 => 16, 8 => 34, 3 => 28, 1 => 47)
-    #fix(x[11, 47], 1; force=true)
-
-    
     for v_edge in edges(v_g), s_edge in edges(s_g)
         if ve_dem[src(v_edge), dst(v_edge)] > se_cap[src(s_edge), dst(s_edge)]
             fix(y[v_edge, s_edge], 0; force=true)
             fix(y[v_edge, Edge(dst(s_edge), src(s_edge))], 0; force=true)
+            i+=2
         end
     end
-
+    println("removed $i variables with capacities!")
+    
     
     # one substrate node per virtual node
     @constraint(model, [v_node in vertices(v_g)], 

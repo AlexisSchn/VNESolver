@@ -6,7 +6,7 @@
 function solve_branch_price(instance::Instance)
 
     # 1 ) Set up the decomposition
-
+    empty!(ROUTING_MODELS)
     time_beginning = time()
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
@@ -65,7 +65,7 @@ function solve_branch_price(instance::Instance)
     
     time_overall = time() - time_beginning
     best_ub = Inf
-    time_max = 500
+    time_max = 5000
     nb_nodes_max = 5000
     
 

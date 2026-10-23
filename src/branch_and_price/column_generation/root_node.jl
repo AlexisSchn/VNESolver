@@ -106,7 +106,7 @@ function solve_column_generation_root_node!(
                     dists, 
                     modified_se_cost,
                     empty_branching,
-                    nb_greedy = 250, 
+                    nb_greedy = 50, 
                     time_max = 10
                 )
                     
@@ -129,7 +129,7 @@ function solve_column_generation_root_node!(
         @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
             iter, rmp_value, lg_bound, "greedy subpricers", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
 
-        if nb_total_columns > 1000 || iter > 100 
+        if nb_total_columns > 1000 || iter > 100 || nb_new_cols < 3
             keep_on=false
         end
 
@@ -181,7 +181,7 @@ function solve_column_generation_root_node!(
                     dists, 
                     modified_se_cost,
                     empty_branching,
-                    nb_greedy = 250, 
+                    nb_greedy = 100, 
                     time_max = 10
                 )
                 
@@ -238,25 +238,58 @@ function solve_column_generation_root_node!(
         rmp_value = stabilization_coeff * rmp_value + (1-stabilization_coeff) * current_rmp_value
 
 
+        modified_se_cost = zeros(Float64, ne(s_g), ne(s_g))
+        for edge in edges(s_g)
+            u, v = src(edge), dst(edge)
+            # Subtract the duals to reflect the true reduced cost of the path
+            modified_se_cost[u, v] = se_cost[u, v] - current_dual_costs.edge_capacity[Edge(u, v)]
+            modified_se_cost[v, u] = se_cost[v, u] - current_dual_costs.edge_capacity[Edge(u, v)]
+        end
+        dists = [floyd_warshall_shortest_paths(s_dir, DynamicWeightMatrix(modified_se_cost, se_cap, d)).dists
+                for d in 1:max_dem]
+
+
+        t=time()                
+
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
                 continue
             end
 
-            t=time()                
-                
-            submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, empty_branching)
-            time_pricer += time()-t
-
-            if reduced_cost < -0.0001 && !isnothing(submapping)
-                add_column!(model_master, columns, v_subgraph, submapping, instance)
-                keep_on = true
-                nb_new_cols += 1
-                nb_total_columns += 1
+            if length(v_subgraph.nodes) <= 10
+                result = solve_exact_pricer(instance, v_subgraph, dual_costs, empty_branching, dists, modified_se_cost)
+                if result.exact
+                    for (submapping, rc) in result.columns
+                        add_column!(model_master, columns, v_subgraph, submapping, instance)
+                        nb_new_cols += 1 
+                        nb_total_columns += 1
+                    end
+                    keep_on |= !isempty(result.columns)
+                    total_reduced += result.min_reduced_cost
+                    continue
+                end
+            else
+                submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, empty_branching)
+                if reduced_cost < -0.0001 && !isnothing(submapping)
+                    add_column!(model_master, columns, v_subgraph, submapping, instance)
+                    keep_on = true
+                    nb_new_cols += 1
+                    nb_total_columns += 1
+                end
             end
+
+
+            # t_milp  = @elapsed (_, rc_milp) = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, empty_branching)
+            # t_exact = @elapsed result = solve_exact_pricer(instance, v_subgraph, dual_costs, empty_branching, dists, modified_se_cost)
+            # @printf("  %s: milp %.4f (%.3fs) | exact %.4f (%.3fs, %d nodes)\n",
+            #     v_subgraph.nodes[1:min(5, end)], rc_milp, t_milp, result.min_reduced_cost, t_exact, result.nb_nodes)
+
+
 
             total_reduced += reduced_cost
         end
+            
+        time_pricer += time()-t
 
         new_lg_bound = rmp_value + total_reduced
         if new_lg_bound > lg_bound && rmp_value < 10e4
@@ -268,8 +301,8 @@ function solve_column_generation_root_node!(
         average_reduced_cost = total_reduced / nb_pricer
 
         time_overall = time() - time_beginning
-        @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
-            iter, rmp_value, lg_bound, "milp", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
+        @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;   Time exact %5.3f;   Gap %2.3f\n", 
+            iter, rmp_value, lg_bound, "milp", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, time_pricer, gap)
 
         if gap<0.15 && stabilization_coeff<0.01
             println("activating stabilization")

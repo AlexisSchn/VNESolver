@@ -24,6 +24,7 @@ include("pricers/greedy_substrate_subgraph.jl")
 include("pricers/greedy_branching.jl")
 include("pricers/new_greedy_claude.jl")
 
+include("pricers/exact_claude.jl")
 
 
 

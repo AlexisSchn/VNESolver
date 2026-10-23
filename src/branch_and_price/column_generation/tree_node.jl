@@ -56,6 +56,9 @@ function solve_column_generation_node!(
     end
 
 
+
+    # ==== AND ALSO: TRYING SOME FIXIN IN THE ALGO?? get the reduced cost for each variable!
+
     # =============== COLUMN GENERATION
 
     optimize!(model_master)
@@ -183,33 +186,64 @@ function solve_column_generation_node!(
         current_rmp_value = objective_value(model_master)
         rmp_value = stabilization_coeff * rmp_value + (1-stabilization_coeff) * current_rmp_value
 
+        modified_se_cost = zeros(Float64, nv(s_g), nv(s_g))
+        for edge in edges(s_g)
+            u, v = src(edge), dst(edge)
+            # Subtract the duals to reflect the true reduced cost of the path
+            modified_se_cost[u, v] = se_cost[u, v] - current_dual_costs.edge_capacity[Edge(u, v)]
+            modified_se_cost[v, u] = se_cost[v, u] - current_dual_costs.edge_capacity[Edge(u, v)]
+        end
+        dists = [floyd_warshall_shortest_paths(s_dir, DynamicWeightMatrix(modified_se_cost, se_cap, d)).dists
+                for d in 1:max_dem]
+
+
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
                 continue
             end
 
-            t=time()                
+            t=time()               
 
-            submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, tree_node.branching)
+            # t_milp  = @elapsed (_, rc_milp) = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, tree_node.branching)
+            # t_exact = @elapsed result = solve_exact_pricer(instance, v_subgraph, dual_costs, tree_node.branching, dists, modified_se_cost)
+            # @printf("  %s: milp %.4f (%.3fs) | exact %.4f (%.3fs, %d nodes)\n",
+            #     v_subgraph.nodes[1:min(5, end)], rc_milp, t_milp, result.min_reduced_cost, t_exact, result.nb_nodes)
+
+
+            if length(v_subgraph.nodes) <= 10
+                result = solve_exact_pricer(instance, v_subgraph, dual_costs, tree_node.branching, dists, modified_se_cost)
+                if result.exact
+                    for (submapping, rc) in result.columns
+                        add_column!(model_master, columns, v_subgraph, submapping, instance)
+                        nb_new_cols += 1; nb_total_columns += 1
+                    end
+                    keep_on |= !isempty(result.columns)
+                    total_reduced += result.min_reduced_cost
+                    continue
+                end
+            else
+                submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, tree_node.branching)
+
+                if reduced_cost < -0.0001 && !isnothing(submapping)
+                    add_column!(model_master, columns, v_subgraph, submapping, instance)
+                    keep_on = true
+                    nb_new_cols += 1
+                    nb_total_columns += 1
+                    total_reduced += reduced_cost
+                end
+
+                if isinf(reduced_cost)
+                    # let's run it again to check...?
+
+                    new_pricer = set_up_pricer(instance, v_subgraph)
+                    submapping, reduced_cost = update_solve_pricer!(new_pricer, v_subgraph, dual_costs, instance, tree_node.branching)
+
+                    println("ERROR, CHECK THE CODE! Well after all, I got: $reduced_cost")
+                end
+            end
+            
             time_pricer += time()-t
 
-            if reduced_cost < -0.0001 && !isnothing(submapping)
-                add_column!(model_master, columns, v_subgraph, submapping, instance)
-                keep_on = true
-                nb_new_cols += 1
-                nb_total_columns += 1
-            end
-
-            if isinf(reduced_cost)
-                # let's run it again to check...?
-
-                new_pricer = set_up_pricer(instance, v_subgraph)
-                submapping, reduced_cost = update_solve_pricer!(new_pricer, v_subgraph, dual_costs, instance, tree_node.branching)
-
-                println("Well after all, I got: $reduced_cost")
-            end
-
-            total_reduced += reduced_cost
         end
 
         new_lg_bound = rmp_value + total_reduced
@@ -239,6 +273,7 @@ function solve_column_generation_node!(
         println("THIS IS NOT TAKEN INTO ACCOUNT YET!!")
         error("Sorry we gotta stop")
     end
+
 
     try
         if lg_bound > 10e5

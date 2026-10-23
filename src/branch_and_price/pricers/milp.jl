@@ -10,7 +10,7 @@ function set_up_pricer(instance::Instance, v_subgraph::Subgraph)
     model = Model(CPLEX.Optimizer)
 
     #set_attribute(model, "CPXPARAM_Threads", 1)
-    set_attribute(model, "CPXPARAM_MIP_Tolerances_UpperCutoff", -1e-6)
+    #set_attribute(model, "CPXPARAM_MIP_Tolerances_UpperCutoff", -1e-6)
     
     ### Variables
     @variable(model, x[v_subgraph.nodes, vertices(s_g)], binary=true);
@@ -207,6 +207,9 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
         x_values = value.(model[:x])
         y_values = value.(model[:y])
 
+
+
+
         node_placement = zeros(Int, length(v_g))
         for v_node in v_subgraph.nodes
             for s_node in vertices(s_g)
@@ -233,6 +236,21 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
             push!(edge_routing, path)
         end
 
+        #= ---- TEMP: LP reduced costs of the x variables
+        let x = model[:x], undo = relax_integrality(model)
+            optimize!(model)
+            lp_value = objective_value(model)
+            rcs = [JuMP.reduced_cost(x[v, s]) for v in v_subgraph.nodes for s in vertices(s_g)
+                   if !is_fixed(x[v, s])]
+            gap = reduced_cost - lp_value          # pricer integrality gap, eats into every rc
+            @printf("  pricer %s: MILP %.2f, LP %.2f (gap %.2f) | %d x vars | rc - gap ≥ 1: %d, ≥ 2: %d, ≥ 5: %d\n",
+                    v_subgraph.nodes[1:min(3, end)], reduced_cost, lp_value, gap, length(rcs),
+                    count(r -> r - gap ≥ 1, rcs), count(r -> r - gap ≥ 2, rcs), count(r -> r - gap ≥ 5, rcs))
+            undo()
+        end
+        =#
+
+        
         return Mapping(node_placement, edge_routing), reduced_cost
 
     finally
