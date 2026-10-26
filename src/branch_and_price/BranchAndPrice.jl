@@ -18,14 +18,9 @@ include("master_problem.jl")
 include("column_generation/root_node.jl")
 include("column_generation/tree_node.jl")
 include("column_generation/potential_solution.jl")
+include("pricers/utils_pricers.jl")
 include("pricers/milp.jl")
 include("pricers/greedy.jl")
-include("pricers/greedy_substrate_subgraph.jl")
-include("pricers/greedy_branching.jl")
-include("pricers/new_greedy_claude.jl")
-
-include("pricers/exact_claude.jl")
-
-
+include("pricers/exact.jl")
 
 end # module

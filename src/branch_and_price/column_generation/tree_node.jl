@@ -89,7 +89,7 @@ function solve_column_generation_node!(
 
 
     # greedy pricers
-    keep_on=true
+    keep_on=false
     while keep_on && time_overall < time_max && iter < nb_iter_max
         
         iter += 1        
@@ -124,8 +124,7 @@ function solve_column_generation_node!(
                 continue
             end
 
-            t=time()
-                        
+            t=time()         
             submapping, reduced_cost = solve_greedy_pricer_claude(
                 instance, 
                 v_subgraph, 
@@ -137,7 +136,6 @@ function solve_column_generation_node!(
                 nb_greedy = 250, 
                 time_max = 10
             )
-        
             time_pricer += time()-t
 
             if reduced_cost < -0.0001 && !isnothing(submapping)
@@ -197,12 +195,13 @@ function solve_column_generation_node!(
                 for d in 1:max_dem]
 
 
+        t=time()               
+
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
                 continue
             end
 
-            t=time()               
 
             # t_milp  = @elapsed (_, rc_milp) = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, tree_node.branching)
             # t_exact = @elapsed result = solve_exact_pricer(instance, v_subgraph, dual_costs, tree_node.branching, dists, modified_se_cost)
@@ -220,6 +219,8 @@ function solve_column_generation_node!(
                     keep_on |= !isempty(result.columns)
                     total_reduced += result.min_reduced_cost
                     continue
+                else
+                    println("AHHHHH PTN QUEL ENFER")
                 end
             else
                 submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, tree_node.branching)
@@ -242,9 +243,10 @@ function solve_column_generation_node!(
                 end
             end
             
-            time_pricer += time()-t
 
         end
+        time_pricer += time()-t
+
 
         new_lg_bound = rmp_value + total_reduced
         if new_lg_bound > lg_bound && rmp_value < 10e4
@@ -280,16 +282,14 @@ function solve_column_generation_node!(
             println("Node unfeasible")
             return
         end
-
         if threshold_ceil(lg_bound) > best_solution-0.01
             return
         end
-
         branch_or_prune(bnp_state, tree_node, lg_bound, dual_costs)
         return         
 
     finally
-        # Unfixing the variables
+        # unfixing the variables
         unique!(variable_fixed)
         for var in variable_fixed
             unfix(var)
@@ -297,6 +297,8 @@ function solve_column_generation_node!(
             set_upper_bound(var, 1.)
         end
 
+        bnp_state.time_rmp      += time_rmp
+        bnp_state.time_pricer   += time_pricer
     end
 
 end

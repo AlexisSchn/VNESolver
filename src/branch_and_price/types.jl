@@ -19,6 +19,7 @@ struct BranchAndPriceParameters <: AbstractSolverParameters
     nb_columns_max::Int
     gap_min::Float64
     stab_coeff::Float64
+    verbose::Int     # 0: silent, 1: basic, 2: complete, 3: crazy
 end
 
 
@@ -29,7 +30,8 @@ function BranchAndPriceParameters()
         500,
         5000,
         0.05,
-        0.
+        0.,
+        1
     )
 end
 
@@ -143,6 +145,8 @@ mutable struct BranchAndPriceState
     nb_nodes::Int
     nb_nodes_remaining::Int
     tree_queue::PriorityQueue{TreeNode, Float64}
+    time_rmp::Float64
+    time_pricer::Float64
 end
 
 
@@ -167,6 +171,8 @@ function BranchAndPriceState(instance::Instance, v_decomposition::OverlappingVir
         0.,
         0,
         0,
-        PriorityQueue{TreeNode, Float64}()
+        PriorityQueue{TreeNode, Float64}(),
+        0.,
+        0.
     )
 end

@@ -11,7 +11,7 @@ function solve_flow_formulation(
 
     model = Model(CPLEX.Optimizer)
 
-    set_optimizer_attribute(model, "CPX_PARAM_RANDOMSEED", 2)
+    #set_optimizer_attribute(model, "CPX_PARAM_RANDOMSEED", 2)
 
     # Disable specific cut types individually
     # set_optimizer_attribute(model, "CPXPARAM_MIP_Cuts_Cliques", -1)
@@ -26,7 +26,7 @@ function solve_flow_formulation(
     # # Primary parameter to disable presolve; 0 for off, 1 for on
     # set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Presolve", 0)
     # set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Aggregator", 0)
-    # set_attribute(model, "CPXPARAM_Threads", 1)
+    set_attribute(model, "CPXPARAM_Threads", 1)
 
     
 

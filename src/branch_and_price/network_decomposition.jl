@@ -130,12 +130,16 @@ function set_up_substrate_subgraphs(graph::Graph, partition::Vector{Vector{Int}}
 end
 
 
-function print_stuff_subgraphs(subgraphs::Vector{Subgraph})
+function print_infos_decompo(v_decomposition::OverlappingVirtualDecomposition)
 
-    println("There is $(length(subgraphs)) subgraphs:")
-    for (i_subgraph, subgraph) in enumerate(subgraphs)
+    println("There is $(length(v_decomposition.subgraphs)) subgraphs:")
+    for (i_subgraph, subgraph) in enumerate(v_decomposition.subgraphs)
         println("       subgraph $i_subgraph with $(length(subgraph.nodes)) nodes and $(length(subgraph.edges)) edges")
     end
+    println("   and $(length(v_decomposition.cut_edges)) cutting edges")
+    println("   and overlapping nodes : $(v_decomposition.overlapping_nodes)")
+    println("Appearances nodes: $(v_decomposition.nb_appearance_nodes)")
+
     
 end
 

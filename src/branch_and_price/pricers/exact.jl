@@ -30,6 +30,16 @@
 # ============================================================================
  
  
+
+
+# ====== TODO
+# Implement non-MILP routing; it seems to be the real bottleneck
+# The detour stuff?
+
+
+# Better bound; especially the unplaced edge part sucks right now...
+#   [13, 14, 15]: milp -0.4851 (0.132s) | exact -0.4851 (0.093s, 26 nodes) i also had stuff like this;...
+
 Base.@kwdef mutable struct ExactSearch
     # ---- data
     k::Int                                              # number of virtual nodes
@@ -95,7 +105,9 @@ function solve_exact_pricer(
         incumbent_cost::Float64 = Inf,
         max_routing_milps::Int  = 1000000,
     )
- 
+    
+    println("\nexact solver for $(v_subgraph.nodes)")
+    time_beg = time()
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities
     n_sn = nv(s_g)
@@ -174,7 +186,8 @@ function solve_exact_pricer(
  
     _search!(st, 1, 0.0)
  
- 
+    println("Time after exploration: $(time()-time_beg) for $(st.nb_nodes) nodes")
+
     # ============ LEAVES WHOSE ROUTING WAS NOT PROVEN OPTIMAL: route them exactly
     # Every other placement was either evaluated exactly or pruned with a bound ≥ best,
     # so once these are resolved, st.best is the exact minimum.
@@ -202,7 +215,8 @@ function solve_exact_pricer(
             end
         end
     end
- 
+
+    println("There is $nb_routing_milps MILP todo")
  
     # ============ RESULTS
     min_reduced_cost = st.best < cutoff_cost ? st.best - conv : 0.0
@@ -216,7 +230,9 @@ function solve_exact_pricer(
         end
         push!(results, (Mapping(node_placement, paths), cost - conv))
     end
- 
+    
+    println("Time overall: $(time() - time_beg)")
+    
     return (columns = results, min_reduced_cost = min_reduced_cost, exact = !st.aborted,
             nb_nodes = st.nb_nodes, nb_routing_milps = nb_routing_milps)
 end
