@@ -4,6 +4,9 @@ function solve_column_generation_root_node!(
         bnp_state::BranchAndPriceState
     )
 
+    verbose = 2
+
+
     time_beginning      = time()
     (; instance, model_master, columns, pricers, v_decomposition) = bnp_state
     ve_dem = instance.v_network.edge_demands
@@ -192,7 +195,7 @@ function solve_column_generation_root_node!(
     optimize!(model_master)
     dual_costs = DualValues(model_master)
     rmp_value = objective_value(model_master)
-
+    heuristic_mode = true
     while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
 
         iter += 1        
@@ -231,54 +234,57 @@ function solve_column_generation_root_node!(
             # @printf("  %s: milp %.4f (%.3fs) | exact %.4f (%.3fs, %d nodes)\n",
             #     v_subgraph.nodes[1:min(10, end)], rc_milp, t_milp, result.min_reduced_cost, t_exact, result.nb_nodes)
 
+            use_milp = length(v_subgraph.nodes) > 10
 
-            if length(v_subgraph.nodes) <= 6
-                result = solve_exact_pricer(instance, v_subgraph, dual_costs, empty_branching, dists, modified_se_cost)
+            if !use_milp
+                result = solve_exact_pricer(instance, v_subgraph, dual_costs, empty_branching,
+                                            dists, modified_se_cost; heuristic_mode = heuristic_mode)
                 if result.exact
                     for (submapping, rc) in result.columns
                         add_column!(model_master, columns, v_subgraph, submapping, instance)
-                        nb_new_cols += 1 
+                        nb_new_cols += 1
                         nb_total_columns += 1
                     end
                     keep_on |= !isempty(result.columns)
                     total_reduced += result.min_reduced_cost
-                    continue
                 else
-                    println("AHHHHH PTN QUEL ENFER")
+                    @warn "Exact pricer gave up on $(v_subgraph.nodes), falling back to the MILP"
+                    use_milp = true
                 end
-            else
-                submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, empty_branching)
+            end
+
+            if use_milp
+                submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs,
+                                                                instance, empty_branching)
                 if reduced_cost < -0.0001 && !isnothing(submapping)
                     add_column!(model_master, columns, v_subgraph, submapping, instance)
                     keep_on = true
                     nb_new_cols += 1
                     nb_total_columns += 1
                 end
+                total_reduced += reduced_cost
             end
 
 
-
-            total_reduced += reduced_cost
         end
             
         time_pricer             += time()-t
         new_lg_bound            = rmp_value + total_reduced
-        if new_lg_bound > lg_bound && rmp_value < 10e4
+        if !heuristic_mode && new_lg_bound > lg_bound && rmp_value < 10e4
             lg_bound = new_lg_bound
         end
         gap                     = (current_rmp_value-lg_bound)/rmp_value
         average_reduced_cost    = total_reduced / nb_pricer
 
         time_overall = time() - time_beginning
-        @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.1f;   Time %5.1f;  Time exact %5.1f; Time RMP: %5.1f  Gap %2.3f\n", 
-            iter, rmp_value, lg_bound, "milp", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, time_pricer, time_rmp, gap)
+        verbose >= 1 && @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.1f;   Time %5.1f;  Time exact %5.1f; Time RMP: %5.1f  Gap %2.3f\n", 
+            iter, rmp_value, lg_bound, "exact", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, time_pricer, time_rmp, gap)
 
-        #=
-        if gap<0.15 && stabilization_coeff<0.01
-            println("activating stabilization")
-            stabilization_coeff = 0.9
+        if average_reduced_cost > -1. && heuristic_mode
+            heuristic_mode=false
+            keep_on = true
+            verbose >= 1 && println("Switching to exact with validation of routing!")
         end
-        =#
     end 
 
 
@@ -286,6 +292,11 @@ function solve_column_generation_root_node!(
     bnp_state.time_pricer   += time_pricer
 
     println("Finished with $lg_bound after $time_overall with $time_pricer for pricer and $time_rmp for RMP")
+
+    if rmp_value > INFEASIBILITY_THRESHOLD          # artificials still in use after convergence
+        println("Node $(tree_node.id) infeasible: RMP still uses artificial variables, RMPval: $rmp_value")
+        return Inf                             # prune (the finally block still unfixes)
+    end
 
     return lg_bound
 

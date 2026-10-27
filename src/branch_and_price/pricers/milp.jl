@@ -9,8 +9,8 @@ function set_up_pricer(instance::Instance, v_subgraph::Subgraph)
 
     model = Model(CPLEX.Optimizer)
 
-    #set_attribute(model, "CPXPARAM_Threads", 1)
-    #set_attribute(model, "CPXPARAM_MIP_Tolerances_UpperCutoff", -1e-6)
+    set_attribute(model, "CPXPARAM_Threads", 1)
+    set_attribute(model, "CPXPARAM_MIP_Tolerances_UpperCutoff", -1e-6)
     
     ### Variables
     @variable(model, x[v_subgraph.nodes, vertices(s_g)], binary=true);
@@ -75,6 +75,7 @@ end
 
 function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualValues, instance::Instance, branching::Branching)
 
+    verbose = 2
 
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap, sn_cost, se_cost = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities, instance.s_network.node_costs, instance.s_network.edge_costs
@@ -167,7 +168,7 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
 
     try
         # solving
-        set_silent(model)
+        verbose <= 3 && set_silent(model)
         optimize!(model)
         
 
@@ -249,8 +250,10 @@ function update_solve_pricer!(model::Model, v_subgraph::Subgraph, duals::DualVal
             undo()
         end
         =#
+        cpx = unsafe_backend(model)                                   # the underlying CPLEX.Optimizer
+        n   = CPLEX.CPXgetsolnpoolnumsolns(cpx.env, cpx.lp)
+        verbose >= 3 && println("Solutions in CPLEX's pool: ", n)
 
-        
         return Mapping(node_placement, edge_routing), reduced_cost
 
     finally

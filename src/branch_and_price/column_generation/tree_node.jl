@@ -5,6 +5,7 @@ function solve_column_generation_node!(
         tree_node::TreeNode
     )
 
+    verbose = 1
     time_beginning = time()
     
     (; instance, model_master, columns, pricers, v_decomposition, best_solution) = bnp_state
@@ -162,29 +163,28 @@ function solve_column_generation_node!(
 
 
     # exact pricers
+
     keep_on=true
     optimize!(model_master)
     dual_costs = DualValues(model_master)
     rmp_value = objective_value(model_master)
-
-    while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min && threshold_ceil(lg_bound) < best_solution - 0.01
+    heuristic_mode = true
+    while keep_on && time_overall < time_max && iter < nb_iter_max && gap > gap_min
 
         iter += 1        
         keep_on         = false
         total_reduced   = 0
         nb_new_cols     = 0
         
-        t=time()
+        time_rmp += @elapsed optimize!(model_master)
 
-        optimize!(model_master)
-        time_rmp += time()-t
-        
         current_dual_costs = DualValues(model_master)
         stabilize_duals!(dual_costs, current_dual_costs, stabilization_coeff)
         current_rmp_value = objective_value(model_master)
         rmp_value = stabilization_coeff * rmp_value + (1-stabilization_coeff) * current_rmp_value
 
-        modified_se_cost = zeros(Float64, nv(s_g), nv(s_g))
+
+        modified_se_cost = zeros(Float64, ne(s_g), ne(s_g))
         for edge in edges(s_g)
             u, v = src(edge), dst(edge)
             # Subtract the duals to reflect the true reduced cost of the path
@@ -195,95 +195,83 @@ function solve_column_generation_node!(
                 for d in 1:max_dem]
 
 
-        t=time()               
+        t=time()                
 
         for v_subgraph in v_decomposition.subgraphs
             if length(v_subgraph.nodes) == 1
                 continue
             end
 
-
-            # t_milp  = @elapsed (_, rc_milp) = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, tree_node.branching)
-            # t_exact = @elapsed result = solve_exact_pricer(instance, v_subgraph, dual_costs, tree_node.branching, dists, modified_se_cost)
+            # t_milp  = @elapsed (_, rc_milp) = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, empty_branching)
+            # t_exact = @elapsed result = solve_exact_pricer(instance, v_subgraph, dual_costs, empty_branching, dists, modified_se_cost)
             # @printf("  %s: milp %.4f (%.3fs) | exact %.4f (%.3fs, %d nodes)\n",
-            #     v_subgraph.nodes[1:min(5, end)], rc_milp, t_milp, result.min_reduced_cost, t_exact, result.nb_nodes)
+            #     v_subgraph.nodes[1:min(10, end)], rc_milp, t_milp, result.min_reduced_cost, t_exact, result.nb_nodes)
 
+            use_milp = length(v_subgraph.nodes) > 10
 
-            if length(v_subgraph.nodes) <= 10
-                result = solve_exact_pricer(instance, v_subgraph, dual_costs, tree_node.branching, dists, modified_se_cost)
+            if !use_milp
+                result = solve_exact_pricer(instance, v_subgraph, dual_costs, tree_node.branching,
+                                            dists, modified_se_cost; heuristic_mode = heuristic_mode)
                 if result.exact
                     for (submapping, rc) in result.columns
                         add_column!(model_master, columns, v_subgraph, submapping, instance)
-                        nb_new_cols += 1; nb_total_columns += 1
+                        nb_new_cols += 1
+                        nb_total_columns += 1
                     end
                     keep_on |= !isempty(result.columns)
                     total_reduced += result.min_reduced_cost
-                    continue
                 else
-                    println("AHHHHH PTN QUEL ENFER")
+                    @warn "Exact pricer gave up on $(v_subgraph.nodes), falling back to the MILP"
+                    use_milp = true
                 end
-            else
-                submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs, instance, tree_node.branching)
+            end
 
+            if use_milp
+                submapping, reduced_cost = update_solve_pricer!(pricers[v_subgraph], v_subgraph, dual_costs,
+                                                                instance, tree_node.branching)
                 if reduced_cost < -0.0001 && !isnothing(submapping)
                     add_column!(model_master, columns, v_subgraph, submapping, instance)
                     keep_on = true
                     nb_new_cols += 1
                     nb_total_columns += 1
-                    total_reduced += reduced_cost
                 end
-
-                if isinf(reduced_cost)
-                    # let's run it again to check...?
-
-                    new_pricer = set_up_pricer(instance, v_subgraph)
-                    submapping, reduced_cost = update_solve_pricer!(new_pricer, v_subgraph, dual_costs, instance, tree_node.branching)
-
-                    println("ERROR, CHECK THE CODE! Well after all, I got: $reduced_cost")
-                end
+                total_reduced += reduced_cost
             end
-            
-
         end
-        time_pricer += time()-t
-
-
-        new_lg_bound = rmp_value + total_reduced
-        if new_lg_bound > lg_bound && rmp_value < 10e4
+            
+        time_pricer             += time()-t
+        new_lg_bound            = rmp_value + total_reduced
+        if !heuristic_mode && new_lg_bound > lg_bound && rmp_value < 10e4
             lg_bound = new_lg_bound
         end
-
-        gap = (current_rmp_value-lg_bound)/rmp_value
-        average_reduced_cost = total_reduced / nb_pricer
+        gap                     = (current_rmp_value-lg_bound)/rmp_value
+        average_reduced_cost    = total_reduced / nb_pricer
 
         time_overall = time() - time_beginning
-        # @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.3f;   Time %5.3f;    Gap %2.3f\n", 
-        #     iter, rmp_value, lg_bound, "milp", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, gap)
+        verbose >= 2 && @printf("Iter %-3d; RMP value: %8.3f;   LG bound: %6.3f,   Pricer: %-8s;   New columns %-2d;   Total columns %-4d;   Aver. red. %5.1f;   Time %5.1f;  Time exact %5.1f; Time RMP: %5.1f  Gap %2.3f\n", 
+            iter, rmp_value, lg_bound, "exact", nb_new_cols, nb_total_columns, average_reduced_cost, time_overall, time_pricer, time_rmp, gap)
 
+        if average_reduced_cost > -1. && heuristic_mode
+            heuristic_mode=false
+            keep_on = true
+            verbose >= 2 && println("Switching to exact with validation of routing!")
+        end
     end 
 
-    #println("Finished with $lg_bound after $time_overall with $time_pricer for pricer and $time_rmp for RMP")
 
+    bnp_state.time_rmp      += time_rmp
+    bnp_state.time_pricer   += time_pricer
 
-    # POST - CG : solution or branching decision
-
-    optimize!(model_master)
-    rmp_value = objective_value(model_master)
-
-    if objective_value(model_master) > 10e5 # why this value here? Idk what you are trying to achieve...
-        println("Large value for master problem $(objective_value(model_master)), but got $lg_bound LBG")
-        println("THIS IS NOT TAKEN INTO ACCOUNT YET!!")
-        error("Sorry we gotta stop")
-    end
+    verbose >= 2 && println("Finished with $lg_bound after $time_overall with $time_pricer for pricer and $time_rmp for RMP")
 
 
     try
-        if lg_bound > 10e5
-            println("Node unfeasible")
-            return
+        if rmp_value > INFEASIBILITY_THRESHOLD
+            println("Node $(tree_node.id) infeasible: RMP still uses artificial variables, RMPval: $rmp_value")
+            return Inf
         end
         if threshold_ceil(lg_bound) > best_solution-0.01
-            return
+            return Inf
         end
         branch_or_prune(bnp_state, tree_node, lg_bound, dual_costs)
         return         

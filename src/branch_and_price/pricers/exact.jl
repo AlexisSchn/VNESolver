@@ -101,12 +101,15 @@ function solve_exact_pricer(
         dists::Vector{Matrix{Float64}},
         modified_se_cost::Matrix{Float64};
         max_columns::Int        = 10,
-        time_max::Float64       = 10.,
+        time_max::Float64       = 5.,
         incumbent_cost::Float64 = Inf,
         max_routing_milps::Int  = 1000000,
+        heuristic_mode::Bool    = false
     )
     
-    println("\nexact solver for $(v_subgraph.nodes)")
+    verbose = 2
+
+    verbose >= 3 && println("\nexact solver for $(v_subgraph.nodes)")
     time_beg = time()
     v_g, vn_dem, ve_dem = instance.v_network.graph, instance.v_network.node_demands, instance.v_network.edge_demands
     s_g, s_dir, sn_cap, se_cap = instance.s_network.graph, instance.s_network.directed_graph, instance.s_network.node_capacities, instance.s_network.edge_capacities
@@ -185,14 +188,16 @@ function solve_exact_pricer(
     )
  
     _search!(st, 1, 0.0)
- 
-    println("Time after exploration: $(time()-time_beg) for $(st.nb_nodes) nodes")
+
+    verbose >= 3 && println("After exploration: best $(st.best), time $(time()-time_beg), nodes $(st.nb_nodes)")
 
     # ============ LEAVES WHOSE ROUTING WAS NOT PROVEN OPTIMAL: route them exactly
     # Every other placement was either evaluated exactly or pruned with a bound ≥ best,
     # so once these are resolved, st.best is the exact minimum.
+
+    #=
     nb_routing_milps = 0
-    if !st.aborted && !isempty(st.unresolved)
+    if !heuristic_mode && !st.aborted && !isempty(st.unresolved)
         sort!(st.unresolved, by = first)
         routing = get_routing_model(v_subgraph, st)         # built once per subgraph, then reused
         set_routing_costs!(routing, st)                     # only the objective changes with the duals
@@ -215,9 +220,93 @@ function solve_exact_pricer(
             end
         end
     end
+    =#
 
-    println("There is $nb_routing_milps MILP todo")
- 
+
+    # THIS IS THE GOOD CODE 
+
+    nb_routing_searches = 0
+    if !heuristic_mode && !st.aborted && !isempty(st.unresolved)
+        sort!(st.unresolved, by = first)
+
+        routing = nothing                                   # MILP fallback, built only if needed
+        
+
+        for (lb_cost, place) in st.unresolved
+            lb_cost >= st.best && break                     # sorted: the others cannot improve either
+
+            node_cost   = sum(st.node_rc[place[j], st.order[j]] for j in 1:st.k)
+            commodities = [(place[a], place[b], d) for (a, b, d) in st.edges]
+
+            nb_routing_searches += 1
+            status, routing_cost, paths = route_exactly(st.s_dir, st.modified_se_cost, st.se_cap,
+                                                        st.dists, commodities, st.best - node_cost)
+
+            if status == :cannot_beat
+                continue
+            elseif status == :gave_up                       # rare: fall back to the MILP for this leaf
+                if isnothing(routing)
+                    routing = get_routing_model(v_subgraph, st)
+                    set_routing_costs!(routing, st)
+                end
+                routed = _route_milp(routing, st, place)
+                isnothing(routed) && continue
+                routing_cost, paths = routed
+            end
+
+            total = node_cost + routing_cost
+            if total < st.best
+                st.best = total
+                push!(st.columns, (total, place, paths))
+            end
+        end
+    end
+
+
+    # # DEBUG MODE - VERIFYING WITH CLAUDE AND MIP
+    # nb_routing_searches = 0
+    # if !heuristic_mode && !st.aborted && !isempty(st.unresolved)
+    #     sort!(st.unresolved, by = first)
+
+    #     routing = get_routing_model(v_subgraph, st)         # DEBUG: always build the MILP
+    #     set_routing_costs!(routing, st)                     # once per call, not per leaf
+
+    #     for (lb_cost, place) in st.unresolved
+    #         lb_cost >= st.best && break
+
+    #         node_cost   = sum(st.node_rc[place[j], st.order[j]] for j in 1:st.k)
+    #         commodities = [(place[a], place[b], d) for (a, b, d) in st.edges]
+    #         limit       = st.best - node_cost               # keep it: st.best may change below
+
+    #         nb_routing_searches += 1
+    #         status, routing_cost_claude, paths_claude = route_exactly(st.s_dir, st.modified_se_cost, st.se_cap,
+    #                                                                 st.dists, commodities, limit)
+
+    #         # ---- DEBUG: compare with the MILP
+    #         if status == :optimal
+    #             routed = _route_milp(routing, st, place)
+    #             routing_cost_milp = isnothing(routed) ? Inf : routed[1]
+    #             println("$status | Claude: $routing_cost_claude, MILP: $routing_cost_milp, limit: $limit")
+    #             if status == :optimal
+    #                 @assert isapprox(routing_cost_claude, routing_cost_milp; atol = 1e-6) "Mismatch: Claude $routing_cost_claude, MILP $routing_cost_milp"
+    #             elseif status == :cannot_beat
+    #                 #@assert routing_cost_milp >= limit - 1e-6 "Claude said cannot beat $limit, but the MILP found $routing_cost_milp"
+    #             end
+    #         end
+    #         # ---- end DEBUG
+
+    #         if status == :optimal
+    #             total = node_cost + routing_cost_claude
+    #             if total < st.best
+    #                 st.best = total
+    #                 push!(st.columns, (total, place, paths_claude))
+    #             end
+    #         end
+    #     end
+    # end
+    
+    verbose >= 3 && println("After MILP: besbest $(st.best), time $(time()-time_beg), routing $nb_routing_searches")
+
     # ============ RESULTS
     min_reduced_cost = st.best < cutoff_cost ? st.best - conv : 0.0
  
@@ -230,11 +319,9 @@ function solve_exact_pricer(
         end
         push!(results, (Mapping(node_placement, paths), cost - conv))
     end
-    
-    println("Time overall: $(time() - time_beg)")
-    
+        
     return (columns = results, min_reduced_cost = min_reduced_cost, exact = !st.aborted,
-            nb_nodes = st.nb_nodes, nb_routing_milps = nb_routing_milps)
+            nb_nodes = st.nb_nodes, nb_routing = nb_routing_searches)
 end
  
  
@@ -557,7 +644,7 @@ end
  
  
 # Routes all edges for `place` (hosts by position). Returns (routing cost, paths) or nothing if infeasible.
-function _route_exactly(routing::RoutingModel, st::ExactSearch, place::Vector{Int})
+function _route_milp(routing::RoutingModel, st::ExactSearch, place::Vector{Int})
  
     # move each edge's endpoints: reset the old right-hand sides first, then set the new ones
     for (e, (pa, pb, _)) in enumerate(st.edges)

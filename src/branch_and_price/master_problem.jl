@@ -127,7 +127,7 @@ end
 function add_dumb_columns!(model_master::Model, v_decomposition::OverlappingVirtualDecomposition)
     for v_subgraph in v_decomposition.subgraphs
         dumb_var = @variable(model_master, lower_bound=0., upper_bound=1.)
-        set_objective_coefficient(model_master, dumb_var, 10e4)
+        set_objective_coefficient(model_master, dumb_var, ARTIFICAL_COL_COST)
         set_normalized_coefficient(model_master[:submapping_selection][v_subgraph], dumb_var, 1)
     end
 end
