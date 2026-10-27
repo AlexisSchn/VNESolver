@@ -40,13 +40,13 @@ function solve_column_generation_node!(
             end
         end
     end
-
     # y variables for branching
-    for v_edge in keys(tree_node.branching.routing_cut_edges_mandatory)
-        s_edge = tree_node.branching.routing_cut_edges_mandatory[v_edge]
-        var = model_master[:y][v_edge, s_edge]
-        fix(var, 1.; force=true)
-        push!(variable_fixed, var)
+    for (v_edge, s_edges) in tree_node.branching.routing_cut_edges_mandatory
+        for s_edge in s_edges
+            var = model_master[:y][v_edge, s_edge]
+            fix(var, 1.0; force = true)
+            push!(variable_fixed, var)
+        end
     end
     for v_edge in keys(tree_node.branching.routing_cut_edges_forbidden)
         for s_edge in tree_node.branching.routing_cut_edges_forbidden[v_edge]

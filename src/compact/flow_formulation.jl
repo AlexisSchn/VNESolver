@@ -26,7 +26,7 @@ function solve_flow_formulation(
     # # Primary parameter to disable presolve; 0 for off, 1 for on
     # set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Presolve", 0)
     # set_optimizer_attribute(model, "CPXPARAM_Preprocessing_Aggregator", 0)
-    set_attribute(model, "CPXPARAM_Threads", 1)
+    #set_attribute(model, "CPXPARAM_Threads", 1)
 
     
 

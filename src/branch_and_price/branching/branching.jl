@@ -67,7 +67,7 @@ function get_branching(bnp_state::BranchAndPriceState)
         for s_edge in edges(instance.s_network.directed_graph)
             if y_values[v_edge, s_edge] > 0.01 && y_values[v_edge, s_edge] < 0.99
                 return (
-                    status=:EdgeBranching,
+                    status=:CutEdgeBranching,
                     branching_rule=(v_edge, s_edge)
                 )
             end
@@ -131,22 +131,20 @@ function branch_or_prune(
 
             return
         
-        elseif result_branching.status == :EdgeBranching
+        elseif result_branching.status == :CutEdgeBranching
 
+            println("Today I'm branching on a cut edge!!!")
             v_edge, s_edge = result_branching.branching_rule
             
             # left
             bnp_state.nb_nodes += 1
             branching_left = deepcopy(tree_node.branching)
-            if v_edge ∈ keys(branching_left.routing_cut_edges_forbidden)
-                delete!(branching_left.routing_cut_edges_forbidden, v_edge)
-            end
             if v_edge ∉ keys(branching_left.routing_cut_edges_mandatory)
                 branching_left.routing_cut_edges_mandatory[v_edge] = Edge[]
             end
             push!(branching_left.routing_cut_edges_mandatory[v_edge], s_edge)
 
-            node = TreeNode(nb_node_created, tree_node.depth+1, branching_left, lg_bound)
+            node = TreeNode(bnp_state.nb_nodes, tree_node.depth+1, branching_left, lg_bound)
             enqueue!(tree_queue, node, node.lower_bound)
 
             # right
@@ -157,7 +155,7 @@ function branch_or_prune(
             else
                 branching_right.routing_cut_edges_forbidden[v_edge] = [s_edge]
             end
-            node = TreeNode(nb_node_created, tree_node.depth+1, branching_right, lg_bound)
+            node = TreeNode(bnp_state.nb_nodes, tree_node.depth+1, branching_right, lg_bound)
             enqueue!(tree_queue, node, node.lower_bound)
 
             return

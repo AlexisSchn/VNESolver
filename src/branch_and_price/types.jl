@@ -1,6 +1,6 @@
 
 const ARTIFICAL_COL_COST = 100_000.0                        # cost of one artificial variable in the master
-const INFEASIBILITY_THRESHOLD = ARTIFICAL_COL_COST / 2      # an RMP or bound above this means artificials are needed
+const INFEASIBILITY_THRESHOLD = ARTIFICAL_COL_COST / 10     # an RMP or bound above this means artificials are needed
 
 # general solver related stuff
 
